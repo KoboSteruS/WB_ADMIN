@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
 import Header from './components/Header';
 // import SimpleHeader from './components/SimpleHeader';
@@ -44,8 +44,7 @@ function App() {
     const isAuth = isAuthAPI || isAuthLocal || hasAuthToken;
     
     if (!isAuth) {
-      // Используем window.history.replaceState для предотвращения возврата
-      window.history.replaceState(null, '', '/login');
+      // Вместо манипуляций с history, просто редиректим на страницу логина
       return <Navigate to="/login" />;
     }
     return <>{children}</>;
