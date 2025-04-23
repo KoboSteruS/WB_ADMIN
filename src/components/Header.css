@@ -1,0 +1,292 @@
+.header-navbar {
+  height: var(--header-height);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  z-index: 1030;
+  background-color: var(--header-bg);
+  color: var(--header-text);
+  border-bottom: 1px solid var(--header-border);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.sidebar-toggle {
+  padding: 4px 8px;
+  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--header-text);
+  background-color: transparent;
+  border-color: transparent;
+  transition: background-color 0.3s ease;
+}
+
+.sidebar-toggle:hover {
+  background-color: var(--sidebar-hover);
+}
+
+.logo-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.brand-name {
+  font-weight: 500;
+  font-size: 1.2rem;
+  color: var(--header-text);
+  transition: color 0.3s ease;
+}
+
+.btn-icon {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 1.1rem;
+  color: var(--header-text);
+  background-color: transparent;
+  border-color: transparent;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.btn-icon:hover {
+  background-color: var(--sidebar-hover);
+}
+
+.notification-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  font-size: 0.7rem;
+  padding: 0.25rem 0.4rem;
+}
+
+.notification-menu {
+  width: 300px;
+  padding: 0;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
+  border: none;
+  border-radius: 10px;
+  background-color: var(--card-bg);
+  color: var(--text-color);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.notification-header {
+  padding: 15px;
+  border-bottom: 1px solid var(--border-color);
+  font-weight: 500;
+  background-color: var(--card-bg);
+  color: var(--text-color);
+}
+
+.notification-body {
+  max-height: 300px;
+  overflow-y: auto;
+  background-color: var(--card-bg);
+}
+
+.notification-item {
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--card-bg);
+  color: var(--text-color);
+  transition: background-color 0.2s ease;
+}
+
+.notification-item:hover {
+  background-color: var(--sidebar-hover);
+}
+
+.notification-footer {
+  padding: 10px;
+  text-align: center;
+  border-top: 1px solid var(--border-color);
+  background-color: var(--card-bg);
+}
+
+.notification-footer a {
+  color: var(--primary-color);
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.balance-container {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background-color: var(--sidebar-hover);
+  border-radius: 5px;
+  transition: background-color 0.3s ease;
+}
+
+.balance-label {
+  font-size: 0.9rem;
+  color: var(--header-text);
+  opacity: 0.8;
+}
+
+.balance-amount {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--header-text);
+}
+
+.account-toggle {
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 5px 10px;
+  color: var(--header-text);
+  transition: background-color 0.3s ease;
+}
+
+.account-toggle:hover {
+  background-color: var(--sidebar-hover);
+}
+
+.account-toggle::after {
+  display: none;
+}
+
+.account-img-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.account-name {
+  font-weight: 500;
+  font-size: 0.95rem;
+  color: var(--header-text);
+  transition: color 0.3s ease;
+}
+
+.account-menu {
+  min-width: 220px;
+  padding: 8px 0;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
+  border: none;
+  border-radius: 10px;
+  background-color: var(--card-bg);
+  color: var(--text-color);
+  transition: background-color 0.3s ease;
+}
+
+.account-menu .dropdown-item {
+  padding: 10px 15px;
+  font-size: 0.95rem;
+  color: var(--text-color);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.account-menu .dropdown-item:hover {
+  background-color: var(--sidebar-hover);
+  color: var(--text-color);
+}
+
+.account-menu .dropdown-item i {
+  width: 20px;
+  text-align: center;
+}
+
+.account-menu .dropdown-divider {
+  margin: 5px 0;
+  border-top: 1px solid var(--border-color);
+}
+
+/* Адаптивность */
+@media (max-width: 576px) {
+  .balance-label {
+    display: none;
+  }
+  
+  .balance-container {
+    padding: 5px;
+  }
+  
+  .notification-menu, .account-menu {
+    position: fixed !important;
+    top: var(--header-height) !important;
+    right: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    height: calc(100vh - var(--header-height));
+    max-height: none;
+  }
+  
+  .notification-body {
+    max-height: calc(100vh - var(--header-height) - 110px);
+  }
+}
+
+/* Стили для аватара пользователя */
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  text-transform: uppercase;
+  line-height: 1;
+  transition: all 0.3s ease;
+}
+
+.account-toggle {
+  background: transparent !important;
+  border: none !important;
+  padding: 0.25rem 0.5rem !important;
+  display: flex;
+  align-items: center;
+  color: var(--header-text) !important;
+  transition: all 0.3s ease;
+}
+
+.account-toggle::after {
+  color: var(--header-text);
+  transition: color 0.3s ease;
+}
+
+.account-toggle:hover, 
+.account-toggle:focus,
+.account-toggle:active {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+[data-theme="dark"] .account-toggle:hover,
+[data-theme="dark"] .account-toggle:focus,
+[data-theme="dark"] .account-toggle:active {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.account-menu {
+  background-color: var(--bg-color);
+  border-color: var(--border-color);
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+.dropdown-item {
+  color: var(--text-color);
+}
+
+.dropdown-item:hover,
+.dropdown-item:focus {
+  background-color: var(--dropdown-hover);
+  color: var(--text-color);
+}
+
+.dropdown-divider {
+  border-top-color: var(--border-color);
+} 

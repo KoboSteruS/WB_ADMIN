@@ -1,0 +1,108 @@
+/* Стили для компонента переключения темы */
+
+.theme-switcher {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Иконочный вариант */
+.theme-switcher-icon .btn-icon {
+  padding: 0.25rem 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  margin: 0;
+  width: 2rem;
+  height: 2rem;
+  transition: all 0.2s ease;
+}
+
+/* Стили для разных состояний темы */
+.theme-switcher-icon .theme-light {
+  color: #212529;
+  background-color: #f8f9fa;
+}
+
+.theme-switcher-icon .theme-dark {
+  color: #f8f9fa;
+  background-color: #343a40;
+}
+
+/* Ховер эффекты */
+.theme-switcher-icon .theme-light:hover {
+  background-color: #e2e6ea;
+}
+
+.theme-switcher-icon .theme-dark:hover {
+  background-color: #23272b;
+}
+
+/* Вариант с переключателем */
+.theme-switcher-switch .form-check {
+  display: flex;
+  align-items: center;
+}
+
+.theme-switcher-switch .form-check-input {
+  cursor: pointer;
+}
+
+/* Ошибка при переключении */
+.theme-switcher-error {
+  margin-left: 0.5rem;
+  color: #ffc107;
+}
+
+/* Размеры */
+.theme-switcher .btn-sm {
+  font-size: 0.875rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.theme-switcher .btn-lg {
+  font-size: 1.25rem;
+  padding: 0.5rem 1rem;
+}
+
+/* Анимация переключения */
+.btn-icon i,
+.form-check-label i {
+  transition: transform 0.3s ease;
+}
+
+.btn-icon:hover i,
+.form-check-label:hover i {
+  transform: rotate(15deg);
+}
+
+/* Темная тема */
+[data-theme="dark"] .theme-switcher-icon .theme-light {
+  color: #f8f9fa;
+  background-color: #343a40;
+}
+
+[data-theme="dark"] .theme-switcher-icon .theme-light:hover {
+  background-color: #23272b;
+}
+
+[data-theme="dark"] .theme-switcher-icon .theme-dark {
+  color: #212529;
+  background-color: #f8f9fa;
+}
+
+[data-theme="dark"] .theme-switcher-icon .theme-dark:hover {
+  background-color: #e2e6ea;
+}
+
+/* Специфичные стили для темной темы */
+[data-theme="dark"] .form-check-label {
+  color: #f8f9fa;
+}
+
+/* Адаптивность */
+@media (max-width: 576px) {
+  .theme-switcher .d-none.d-md-inline {
+    display: none !important;
+  }
+} 
