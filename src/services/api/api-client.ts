@@ -14,10 +14,9 @@ export class ApiClient {
    * Создает экземпляр API клиента
    * @param baseUrl - Базовый URL API
    */
-  constructor(baseUrl: string = 'http://85.193.81.178:8080/api/v1') {
+  constructor(baseUrl: string = 'http://62.113.44.196:8080/api/v1') {
     this.baseUrl = baseUrl;
-    this.accessToken = localStorage.getItem('accessToken');
-    this.refreshToken = localStorage.getItem('refreshToken');
+    this.loadTokens();
   }
 
   /**
@@ -422,6 +421,11 @@ export class ApiClient {
                        `Ошибка сервера (${error.response.status})`;
     
     throw new Error(errorMessage);
+  }
+
+  private loadTokens(): void {
+    this.accessToken = localStorage.getItem('accessToken');
+    this.refreshToken = localStorage.getItem('refreshToken');
   }
 }
 

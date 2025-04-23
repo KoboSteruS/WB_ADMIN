@@ -8,7 +8,7 @@ class ApiClient {
   private token: string | null;
 
   constructor() {
-    this.baseUrl = 'http://85.193.81.178:8080/api/v1';
+    this.baseUrl = 'http://62.113.44.196:8080/api/v1';
     this.token = localStorage.getItem('auth_token');
   }
 

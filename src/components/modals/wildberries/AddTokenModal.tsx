@@ -52,7 +52,7 @@ const AddTokenModal: React.FC<AddTokenModalProps> = ({ show, onHide, onSubmit })
     
     try {
       // Прямой вызов API вместо использования onSubmit
-      const url = "http://85.193.81.178:8080/api/v1/wb-tokens/";
+      const url = "http://62.113.44.196:8080/api/v1/wb-tokens/";
       const data = {
         token: token.trim(),
         name: name.trim() || undefined

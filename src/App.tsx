@@ -23,9 +23,6 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // Определяем базовый путь для GitHub Pages
-  const basename = process.env.NODE_ENV === 'production' ? '/WB_ADMIN' : '/';
-
   useEffect(() => {
     // Проверка авторизации при загрузке через authService или localStorage
     const isAuthAPI = authService.isAuthenticated();
@@ -56,7 +53,7 @@ function App() {
 
   return (
     <ThemeProvider>
-      <Router basename={basename}>
+      <Router>
         <Routes>
           <Route path="/login" element={
             isAuthenticated ? <Navigate to="/" /> : <Login />

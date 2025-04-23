@@ -62,10 +62,10 @@ const Wildberries: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      const response = await fetch('http://85.193.81.178:8080/api/v1/wb-tokens/', {
+      const response = await fetch('http://62.113.44.196:8080/api/v1/wb-tokens/', {
         method: 'GET',
         headers: {
-          'Authorization': 'Token d65c2b3ed3a643341c8f2b7f380fb5a12dac826f'
+          'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133'
         }
       });
 
@@ -174,7 +174,7 @@ const Wildberries: React.FC = () => {
     setTokenAddSuccess(false);
     
     try {
-      const url = "http://85.193.81.178:8080/api/v1/wb-tokens/";
+      const url = "http://62.113.44.196:8080/api/v1/wb-tokens/";
       const data = {
         token: newToken.trim(),
         name: newTokenName.trim() || undefined
@@ -185,7 +185,7 @@ const Wildberries: React.FC = () => {
       const response = await fetch(url, {
         method: "POST",
         headers: {
-          'Authorization': 'Token d65c2b3ed3a643341c8f2b7f380fb5a12dac826f',
+          'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133',
           "Content-Type": "application/json"
         },
         body: JSON.stringify(data)
@@ -266,7 +266,7 @@ const Wildberries: React.FC = () => {
     setDeleteError(null);
     
     try {
-      const url = `http://85.193.81.178:8080/api/v1/wb-tokens/${tokenToDelete.id}/`;
+      const url = `http://62.113.44.196:8080/api/v1/wb-tokens/${tokenToDelete.id}/`;
       
       console.log(`Удаление токена с ID: ${tokenToDelete.id}`);
       
@@ -274,7 +274,7 @@ const Wildberries: React.FC = () => {
         method: 'DELETE',
         headers: {
           'Accept': 'application/json',
-          'Authorization': 'Token d65c2b3ed3a643341c8f2b7f380fb5a12dac826f'
+          'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133'
         }
       });
       

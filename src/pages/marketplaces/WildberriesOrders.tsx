@@ -18,24 +18,46 @@ import { useNavigate } from 'react-router-dom';
  */
 interface WbOrder {
   id: number;
-  sale_price?: number;
-  status?: string;
-  created_at?: string;
-  ddate?: string;
-  createdAt?: string;
-  article?: string;
-  nmId?: number;
-  skus?: string[];
-  salePrice?: number;
+  address?: string | null;
+  ddate?: string | null;
+  sale_price?: string;
+  required_meta?: any[];
+  delivery_type?: string;
   comment?: string;
+  scan_price?: string | null;
+  order_uid?: string;
+  article?: string;
+  color_code?: string;
+  rid?: string;
+  created_at?: string;
   offices?: string[];
+  skus?: string[];
+  order_id?: string;
+  warehouse_id?: number;
+  nm_id?: number;
+  chrt_id?: number;
+  price?: string;
+  converted_price?: string;
+  currency_code?: number;
+  converted_currency_code?: number;
+  cargo_type?: number;
+  is_zero_order?: boolean;
+  options?: {
+    isB2B?: boolean;
+    [key: string]: any;
+  };
+  wb_token?: number;
   [key: string]: any;
+}
+
+interface WildberriesOrdersProps {
+  token?: string;
 }
 
 /**
  * Компонент для отображения заказов Wildberries
  */
-const WildberriesOrders: React.FC = () => {
+const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
   const navigate = useNavigate();
   
   const [orders, setOrders] = useState<WbOrder[]>([]);
@@ -44,6 +66,8 @@ const WildberriesOrders: React.FC = () => {
   const [selectedOrders, setSelectedOrders] = useState<Set<number>>(new Set());
   const [selectAll, setSelectAll] = useState<boolean>(false);
   const [showTestData, setShowTestData] = useState<boolean>(false);
+  const [rawResponse, setRawResponse] = useState<string>('');
+  const [showRawResponse, setShowRawResponse] = useState<boolean>(false);
   
   // Состояния для модального окна добавления токена
   const [showAddTokenModal, setShowAddTokenModal] = useState<boolean>(false);
@@ -100,56 +124,84 @@ const WildberriesOrders: React.FC = () => {
   const fetchOrders = async () => {
     setLoading(true);
     setError(null);
+    setRawResponse('');
+    console.log('Отправка запроса на получение заказов...');
     
     try {
-      console.log('Отправка запроса на получение заказов...');
-      const response = await fetch('http://85.193.81.178:8080/api/v1/wb-orders/', {
+      const apiUrl = 'http://62.113.44.196:8080/api/v1/wb-orders/';
+      console.log('URL запроса:', apiUrl);
+      
+      const response = await fetch(apiUrl, {
         method: 'GET',
         headers: {
-          'Authorization': 'Token d65c2b3ed3a643341c8f2b7f380fb5a12dac826f'
+          'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133'
         }
       });
-      
+    
       console.log(`Статус ответа: ${response.status} ${response.statusText}`);
       
+      // Сохраняем и выводим все заголовки ответа
+      const headers: Record<string, string> = {};
+      response.headers.forEach((value, key) => {
+        headers[key] = value;
+      });
+      console.log('Заголовки ответа:', headers);
+      
+      // Получаем сырой текст ответа
+      const responseText = await response.text();
+      setRawResponse(responseText);
+      console.log('Сырой ответ:', responseText);
+      
       if (!response.ok) {
-        throw new Error(`Ошибка HTTP: ${response.status}`);
+        throw new Error(`Ошибка HTTP: ${response.status} ${response.statusText}`);
       }
-      
-      const data = await response.json();
-      console.log('Данные получены:', data);
-      
-      let orderData: WbOrder[] = [];
-      
-      if (Array.isArray(data)) {
-        console.log('Получен массив данных');
-        orderData = data;
-      } else if (data && typeof data === 'object') {
-        if (Array.isArray(data.results)) {
-          console.log('Получены данные в поле results');
-          orderData = data.results;
-        } else if (Array.isArray(data.data)) {
-          console.log('Получены данные в поле data');
-          orderData = data.data;
-        } else if (Array.isArray(data.orders)) {
-          console.log('Получены данные в поле orders');
-          orderData = data.orders;
-        } else {
-          console.log('Структура данных не определена, использую тестовые данные');
-          setShowTestData(true);
-          return;
-        }
-      } else {
-        console.log('Неизвестный формат данных, использую тестовые данные');
-        setShowTestData(true);
+    
+      // Пробуем распарсить JSON
+      let data;
+      try {
+        data = JSON.parse(responseText);
+        console.log('Данные JSON:', data);
+      } catch (err) {
+        console.error('Ошибка парсинга JSON:', err);
+        setError('Ошибка парсинга ответа сервера. Сервер вернул некорректный JSON.');
+        setOrders([]);
+        setLoading(false);
         return;
       }
-      
-      setOrders(orderData);
-      console.log(`Успешно получено заказов: ${orderData.length}`);
-      
-      if (orderData.length > 0) {
-        console.log('Пример заказа:', orderData[0]);
+    
+      if (Array.isArray(data)) {
+        console.log('Успешно получено заказов:', data.length);
+        if (data.length > 0) {
+          console.log('Пример заказа:', data[0]);
+          console.log('Доступные поля:', Object.keys(data[0]).join(', '));
+        }
+        
+        setOrders(data);
+      } else {
+        console.log('Ответ сервера не является массивом:', data);
+        // Проверим другие возможные структуры данных
+        if (data && typeof data === 'object') {
+          if (Array.isArray(data.results)) {
+            console.log('Получены данные в поле results');
+            setOrders(data.results);
+          } else if (Array.isArray(data.data)) {
+            console.log('Получены данные в поле data');
+            setOrders(data.data);
+          } else if (Array.isArray(data.orders)) {
+            console.log('Получены данные в поле orders');
+            setOrders(data.orders);
+          } else if (Array.isArray(data.items)) {
+            console.log('Получены данные в поле items');
+            setOrders(data.items);
+          } else {
+            console.log('Структура данных не определена');
+            setError('В ответе сервера не найдены заказы. Проверьте формат ответа в консоли.');
+            setOrders([]);
+          }
+        } else {
+          setError('Неверный формат данных от сервера');
+          setOrders([]);
+        }
       }
     } catch (error) {
       if (error instanceof Error) {
@@ -159,6 +211,7 @@ const WildberriesOrders: React.FC = () => {
         console.error('Произошла неизвестная ошибка при загрузке заказов');
         setError('Произошла неизвестная ошибка при загрузке заказов');
       }
+      setOrders([]);
     } finally {
       setLoading(false);
     }
@@ -181,14 +234,19 @@ const WildberriesOrders: React.FC = () => {
   };
 
   // Форматирование цены
-  const formatPrice = (price?: number) => {
-    if (price === undefined) return '—';
+  const formatPrice = (price?: string | number) => {
+    if (price === undefined || price === null) return '—';
+    
+    // Если цена передана как строка, преобразуем ее в число
+    const numPrice = typeof price === 'string' ? parseFloat(price) : price;
+    
+    if (isNaN(numPrice)) return price;
     
     return new Intl.NumberFormat('ru-RU', {
       style: 'currency',
       currency: 'RUB',
       maximumFractionDigits: 0
-    }).format(price);
+    }).format(numPrice);
   };
 
   // Получение статуса заказа с соответствующим стилем
@@ -256,6 +314,11 @@ const WildberriesOrders: React.FC = () => {
     setShowTestData(!showTestData);
   };
 
+  // Переключатель для отображения сырого ответа
+  const toggleRawResponse = () => {
+    setShowRawResponse(!showRawResponse);
+  };
+
   // Данные для отображения
   const displayOrders = showTestData ? testOrders : orders;
 
@@ -274,18 +337,18 @@ const WildberriesOrders: React.FC = () => {
     setTokenAddSuccess(false);
     
     try {
-      const url = "http://85.193.81.178:8080/api/v1/wb-tokens/";
+      const url = "http://62.113.44.196:8080/api/v1/wb-tokens/";
       const data = {
         token: newToken.trim(),
         name: newTokenName.trim() || undefined
       };
       
-      console.log('Отправляемые данные:', data);
+      console.log('Sending data:', data);
       
       const response = await fetch(url, {
         method: "POST",
         headers: {
-          'Authorization': 'Token d65c2b3ed3a643341c8f2b7f380fb5a12dac826f',
+          'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133',
           "Content-Type": "application/json"
         },
         body: JSON.stringify(data)
@@ -380,6 +443,13 @@ const WildberriesOrders: React.FC = () => {
                 <i className="bi bi-database"></i> {showTestData ? "Тестовые данные (активно)" : "Тестовые данные"}
               </Button>
               <Button 
+                variant={showRawResponse ? "info" : "outline-info"}
+                onClick={toggleRawResponse} 
+                className="me-2"
+              >
+                <i className="bi bi-braces"></i> {showRawResponse ? "Скрыть ответ API" : "Показать ответ API"}
+              </Button>
+              <Button 
                 variant="outline-secondary" 
                 onClick={() => navigate('/marketplace-settings/wildberries')}
               >
@@ -393,6 +463,19 @@ const WildberriesOrders: React.FC = () => {
               <Alert.Heading>Ошибка!</Alert.Heading>
               <p>{error}</p>
             </Alert>
+          )}
+          
+          {showRawResponse && rawResponse && (
+            <Card className="mb-4">
+              <Card.Header>
+                <h5 className="mb-0">Сырой ответ API</h5>
+              </Card.Header>
+              <Card.Body className="p-0">
+                <div className="bg-dark text-light p-3" style={{ overflow: 'auto', maxHeight: '300px' }}>
+                  <pre>{rawResponse}</pre>
+                </div>
+              </Card.Body>
+            </Card>
           )}
           
           <Card>
@@ -446,16 +529,16 @@ const WildberriesOrders: React.FC = () => {
                             aria-label="Выбрать все заказы"
                           />
                         </th>
-                        <th>Дата доставки</th>
-                        <th>Дата создания</th>
                         <th>ID</th>
+                        <th>Дата создания</th>
+                        <th>№ заказа</th>
                         <th>Артикул</th>
                         <th>NM ID</th>
                         <th>SKUs</th>
                         <th>Цена продажи</th>
-                        <th>Комментарий</th>
                         <th>Офисы</th>
-                        <th>Статус</th>
+                        <th>Тип доставки</th>
+                        <th>Комментарий</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -469,24 +552,28 @@ const WildberriesOrders: React.FC = () => {
                               aria-label={`Выбрать заказ ${order.id}`}
                             />
                           </td>
-                          <td>{formatDate(order.ddate)}</td>
-                          <td>{formatDate(order.createdAt || order.created_at)}</td>
                           <td>{order.id}</td>
+                          <td>{formatDate(order.created_at)}</td>
+                          <td>{order.order_uid || order.order_id || '—'}</td>
                           <td>{order.article || '—'}</td>
-                          <td>{order.nmId || '—'}</td>
+                          <td>{order.nm_id || '—'}</td>
                           <td>
                             {order.skus && order.skus.length > 0 
                               ? order.skus.join(', ') 
                               : '—'}
                           </td>
-                          <td>{formatPrice(order.salePrice || order.sale_price)}</td>
-                          <td>{order.comment || '—'}</td>
+                          <td>{formatPrice(order.sale_price || order.price)}</td>
                           <td>
                             {order.offices && order.offices.length > 0 
                               ? order.offices.join(', ') 
                               : '—'}
                           </td>
-                          <td>{getStatusBadge(order.status)}</td>
+                          <td>
+                            {order.delivery_type 
+                              ? <Badge bg="primary">{order.delivery_type.toUpperCase()}</Badge>
+                              : '—'}
+                          </td>
+                          <td>{order.comment || '—'}</td>
                         </tr>
                       ))}
                     </tbody>
