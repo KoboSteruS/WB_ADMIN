@@ -69,10 +69,26 @@ const Wildberries: React.FC = () => {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteSuccess, setDeleteSuccess] = useState<boolean>(false);
 
+  // Состояние для отслеживания процесса обновления данных
+  const [refreshing, setRefreshing] = useState(false);
+  // Состояние для отслеживания обновления юридических лиц
+  const [refreshingLegalEntities, setRefreshingLegalEntities] = useState(false);
+  // Состояние для поиска по юридическим лицам
+  const [legalEntitySearchTerm, setLegalEntitySearchTerm] = useState('');
+  // Состояние для отображения сообщения о копировании ИНН токена
+  const [copiedTokenInn, setCopiedTokenInn] = useState<number | null>(null);
+  // Состояние для отображения сообщения о копировании ИНН юридического лица
+  const [copiedInn, setCopiedInn] = useState<string | null>(null);
+  // Состояние для отслеживания обновления конкретного юридического лица
+  const [updatingEntityId, setUpdatingEntityId] = useState<string | null>(null);
+  // Состояние для отслеживания обновления конкретного токена
+  const [updatingTokenId, setUpdatingTokenId] = useState<number | null>(null);
+
   // Загрузка токенов и юр. лиц при монтировании компонента
   useEffect(() => {
-    fetchTokens();
-    fetchLegalEntities();
+    fetchLegalEntities().then(() => {
+      fetchTokens();
+    });
   }, []);
 
   // Функция для получения токенов
@@ -94,17 +110,47 @@ const Wildberries: React.FC = () => {
 
       const data = await response.json();
 
+      // Проверка и отладка данных
+      console.log('Юридические лица:', legalEntities);
+      console.log('Токены до обогащения:', data);
+
       if (Array.isArray(data)) {
-        setTokens(data);
-        console.log('Успешно получено токенов:', data.length);
-        data.forEach(token => {
+        // Создаем словарь юридических лиц для быстрого доступа
+        const legalEntitiesMap: Record<string, LegalEntity> = {};
+        legalEntities.forEach(entity => {
+          legalEntitiesMap[entity.id] = entity;
+        });
+        
+        console.log('Карта юридических лиц:', legalEntitiesMap);
+
+        // Обогащаем токены данными о юр. лицах
+        const enrichedTokens = data.map(token => {
+          const accountIp = token.account_ip?.toString();
+          console.log(`Обработка токена ID=${token.id}, account_ip=${accountIp}`);
+          
+          // Получаем юридическое лицо из словаря по ключу
+          const legalEntity = accountIp && legalEntitiesMap[accountIp] ? legalEntitiesMap[accountIp] : null;
+          console.log(`Найденное юр. лицо для токена ${token.id}:`, legalEntity);
+          
+          return {
+            ...token,
+            // Добавляем данные из найденного юр. лица или используем значения по умолчанию
+            account_title: legalEntity?.title || 'Не указано',
+            account_inn: legalEntity?.inn || '-'
+          };
+        });
+        
+        console.log('Обогащенные токены:', enrichedTokens);
+        setTokens(enrichedTokens);
+        console.log('Успешно получено токенов:', enrichedTokens.length);
+        enrichedTokens.forEach(token => {
           console.log('---');
           console.log('ID:', token.id);
           console.log('TOKEN:', token.token);
           console.log('Time:', token.created_at);
-          console.log('Account_id:', token.account_ip || '-');
-          console.log('Account_title:', token.account_title || 'TestIP');
-          console.log('Account_inn:', token.account_inn || '123');
+          console.log('Account_ip:', token.account_ip || '-');
+          console.log('Account_title:', token.account_title);
+          console.log('Account_inn:', token.account_inn);
         });
       } else {
         console.log('Ответ сервера не является массивом:', data);
@@ -127,6 +173,7 @@ const Wildberries: React.FC = () => {
     try {
       setLegalEntitiesLoading(true);
       setLegalEntitiesError(null);
+      setRefreshingLegalEntities(true);
       
       const response = await fetch('http://62.113.44.196:8080/api/v1/account-ip/', {
         method: 'GET',
@@ -157,6 +204,7 @@ const Wildberries: React.FC = () => {
       console.error('Ошибка при запросе юр. лиц:', err);
     } finally {
       setLegalEntitiesLoading(false);
+      setRefreshingLegalEntities(false);
     }
   };
 
@@ -219,6 +267,24 @@ const Wildberries: React.FC = () => {
   // Обработчик перехода на страницу всех заказов
   const handleViewAllOrders = () => {
     navigate('/marketplace-settings/wildberries/orders');
+  };
+
+  /**
+   * Обработчик обновления списка токенов
+   */
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      // Сначала получаем актуальные данные о юр. лицах
+      await fetchLegalEntities();
+      // Затем на основе актуальных данных о юр. лицах обогащаем токены
+      await fetchTokens();
+    } catch (error) {
+      console.error('Ошибка при обновлении данных:', error);
+      setError('Не удалось обновить данные. Пожалуйста, попробуйте еще раз.');
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   // Обработчик отправки формы добавления токена
@@ -287,7 +353,8 @@ const Wildberries: React.FC = () => {
         console.log('Токен успешно добавлен');
         setTokenAddSuccess(true);
         
-        // Обновляем список токенов
+        // Обновляем список юр. лиц и токенов
+        await fetchLegalEntities();
         await fetchTokens();
         
         // Сбрасываем форму через 2 секунды
@@ -405,6 +472,8 @@ const Wildberries: React.FC = () => {
         // Закрываем модальное окно через 1.5 секунды
         setTimeout(() => {
           closeDeleteModal();
+          // Обновляем данные из API
+          fetchLegalEntities().then(() => fetchTokens());
         }, 1500);
       } else {
         const text = await response.text();
@@ -428,6 +497,132 @@ const Wildberries: React.FC = () => {
       }
     } finally {
       setDeleteLoading(false);
+    }
+  };
+
+  // Обработчик обновления юридических лиц
+  const handleRefreshLegalEntities = async () => {
+    setRefreshingLegalEntities(true);
+    try {
+      await fetchLegalEntities();
+    } catch (error) {
+      console.error('Ошибка при обновлении юридических лиц:', error);
+      setLegalEntitiesError('Не удалось обновить данные. Пожалуйста, попробуйте еще раз.');
+    } finally {
+      setRefreshingLegalEntities(false);
+    }
+  };
+
+  // Обработчик копирования ИНН токена в буфер обмена
+  const handleCopyTokenInn = (tokenId: number, inn: string) => {
+    navigator.clipboard.writeText(inn);
+    setCopiedTokenInn(tokenId);
+    
+    // Убираем сообщение через 2 секунды
+    setTimeout(() => {
+      setCopiedTokenInn(null);
+    }, 2000);
+  };
+
+  // Обработчик копирования ИНН юридического лица в буфер обмена
+  const handleCopyInn = (inn: string) => {
+    navigator.clipboard.writeText(inn);
+    setCopiedInn(inn);
+    
+    // Убираем сообщение через 2 секунды
+    setTimeout(() => {
+      setCopiedInn(null);
+    }, 2000);
+  };
+
+  // Фильтрация юридических лиц по поисковому запросу
+  const filteredLegalEntities = legalEntities.filter(entity => {
+    if (!legalEntitySearchTerm.trim()) return true;
+    
+    const searchTerm = legalEntitySearchTerm.toLowerCase();
+    return (
+      entity.title.toLowerCase().includes(searchTerm) ||
+      entity.inn.toLowerCase().includes(searchTerm) ||
+      entity.id.toString().includes(searchTerm)
+    );
+  });
+
+  // Обработчик обновления конкретного юридического лица
+  const handleRefreshEntity = async (entityId: string) => {
+    setUpdatingEntityId(entityId);
+    try {
+      const response = await fetch(`http://62.113.44.196:8080/api/v1/account-ip/${entityId}/`, {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ошибка HTTP: ${response.status}`);
+      }
+
+      const updatedEntity = await response.json();
+      
+      // Обновляем сущность в списке
+      setLegalEntities(prevEntities => 
+        prevEntities.map(entity => 
+          entity.id === entityId ? { ...updatedEntity } : entity
+        )
+      );
+      
+      console.log(`Успешно обновлено юридическое лицо с ID: ${entityId}`);
+    } catch (error) {
+      console.error(`Ошибка при обновлении юридического лица с ID ${entityId}:`, error);
+      // При ошибке одного юридического лица, обновляем все для консистентности
+      await fetchLegalEntities();
+    } finally {
+      setUpdatingEntityId(null);
+    }
+  };
+
+  // Обработчик обновления конкретного токена
+  const handleRefreshToken = async (tokenId: number) => {
+    setUpdatingTokenId(tokenId);
+    try {
+      const response = await fetch(`http://62.113.44.196:8080/api/v1/wb-tokens/${tokenId}/`, {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ошибка HTTP: ${response.status}`);
+      }
+
+      const updatedToken = await response.json();
+      
+      // Находим юридическое лицо для токена
+      const accountIp = updatedToken.account_ip?.toString();
+      const legalEntity = accountIp && legalEntities.find(entity => entity.id === accountIp);
+      
+      // Обновляем токен с данными юридического лица
+      const enrichedToken = {
+        ...updatedToken,
+        account_title: legalEntity?.title || 'Не указано',
+        account_inn: legalEntity?.inn || '-'
+      };
+      
+      // Обновляем токен в списке
+      setTokens(prevTokens => 
+        prevTokens.map(token => 
+          token.id === tokenId ? enrichedToken : token
+        )
+      );
+      
+      console.log(`Успешно обновлен токен с ID: ${tokenId}`);
+    } catch (error) {
+      console.error(`Ошибка при обновлении токена с ID ${tokenId}:`, error);
+      // При ошибке обновления одного токена, обновляем все для консистентности
+      await fetchLegalEntities().then(() => fetchTokens());
+    } finally {
+      setUpdatingTokenId(null);
     }
   };
 
@@ -463,9 +658,22 @@ const Wildberries: React.FC = () => {
           <Card>
             <Card.Header className="d-flex justify-content-between align-items-center">
               <h5 className="mb-0">Токены API</h5>
-              {!loading && (
-                <span className="text-muted">Всего токенов: {tokens.length}</span>
-              )}
+              <div className="d-flex align-items-center gap-3">
+                {refreshing && <Spinner animation="border" size="sm" />}
+                <Button
+                  variant="outline-primary"
+                  size="sm"
+                  onClick={handleRefresh}
+                  disabled={refreshing || loading}
+                  title="Обновить данные"
+                >
+                  <i className="bi bi-arrow-clockwise me-1"></i>
+                  {refreshing ? 'Обновление...' : 'Обновить'}
+                </Button>
+                {!loading && (
+                  <span className="text-muted">Всего токенов: {tokens.length}</span>
+                )}
+              </div>
             </Card.Header>
             <Card.Body>
               {loading ? (
@@ -535,26 +743,40 @@ const Wildberries: React.FC = () => {
                           </td>
                           <td>{token.created_at || '-'}</td>
                           <td>{token.account_ip || '-'}</td>
-                          <td>{token.account_title || 'TestIP'}</td>
-                          <td>{token.account_inn || '123'}</td>
+                          <td>
+                            {updatingTokenId === token.id ? (
+                              <div className="d-flex align-items-center">
+                                <Spinner animation="border" size="sm" className="me-2" />
+                                <span>Обновление...</span>
+                              </div>
+                            ) : (
+                              token.account_title || 'Не указано'
+                            )}
+                          </td>
+                          <td>
+                            <div className="d-flex align-items-center">
+                              {token.account_inn || '-'}
+                              {token.account_inn && token.account_inn !== '-' && (
+                                <>
+                                  <Button 
+                                    variant="link" 
+                                    size="sm" 
+                                    className="p-0 ms-2" 
+                                    onClick={() => handleCopyTokenInn(token.id, token.account_inn as string)}
+                                  >
+                                    <i className="bi bi-clipboard"></i>
+                                  </Button>
+                                  {copiedTokenInn === token.id && (
+                                    <span className="text-success ms-1 small">
+                                      <i className="bi bi-check-lg"></i>
+                                    </span>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </td>
                           <td>
                             <div className="d-flex gap-2 justify-content-center">
-                              <Button 
-                                variant="outline-primary" 
-                                size="sm"
-                                onClick={() => handleViewOrders(token.id)}
-                                title="Просмотреть заказы по этому токену"
-                              >
-                                <i className="bi bi-box"></i>
-                              </Button>
-                              <Button 
-                                variant="outline-secondary" 
-                                size="sm"
-                                onClick={() => navigate(`/marketplace-settings/wildberries/tokens/edit/${token.id}`)}
-                                title="Редактировать токен"
-                              >
-                                <i className="bi bi-pencil"></i>
-                              </Button>
                               <Button 
                                 variant="outline-danger" 
                                 size="sm"
@@ -562,6 +784,19 @@ const Wildberries: React.FC = () => {
                                 title="Удалить токен"
                               >
                                 <i className="bi bi-trash"></i>
+                              </Button>
+                              <Button 
+                                variant="outline-info" 
+                                size="sm"
+                                onClick={() => handleRefreshToken(token.id)}
+                                disabled={updatingTokenId === token.id}
+                                title="Обновить информацию о токене"
+                              >
+                                {updatingTokenId === token.id ? (
+                                  <Spinner animation="border" size="sm" />
+                                ) : (
+                                  <i className="bi bi-arrow-clockwise"></i>
+                                )}
                               </Button>
                             </div>
                           </td>
@@ -584,37 +819,6 @@ const Wildberries: React.FC = () => {
         </Col>
       </Row>
 
-      <div className="d-flex gap-4 flex-wrap mb-4">
-        <Card>
-          <Card.Body>
-            <Card.Title>API токены Wildberries</Card.Title>
-            <Card.Text>
-              Управление токенами доступа к API Wildberries
-            </Card.Text>
-            <Button 
-              variant="primary" 
-              onClick={() => navigate('/marketplace-settings/wildberries/tokens')}
-            >
-              Управление токенами
-            </Button>
-          </Card.Body>
-        </Card>
-        
-        <Card>
-          <Card.Body>
-            <Card.Title>Заказы Wildberries</Card.Title>
-            <Card.Text>
-              Просмотр и управление заказами маркетплейса Wildberries
-            </Card.Text>
-            <Button 
-              variant="primary" 
-              onClick={() => navigate('/marketplace-settings/wildberries/orders')}
-            >
-              Перейти к заказам
-            </Button>
-          </Card.Body>
-        </Card>
-      </div>
 
       {/* Модальное окно добавления токена */}
       <Modal 
@@ -645,34 +849,71 @@ const Wildberries: React.FC = () => {
           <Form onSubmit={handleAddToken}>
             <Form.Group className="mb-3">
               <Form.Label className="text-light">Выберите юридическое лицо</Form.Label>
-              {legalEntitiesLoading ? (
-                <div className="text-center py-2">
-                  <Spinner animation="border" size="sm" />
-                  <span className="ms-2">Загрузка юридических лиц...</span>
-                </div>
-              ) : legalEntitiesError ? (
-                <Alert variant="danger" className="py-2">
-                  Ошибка загрузки юридических лиц: {legalEntitiesError}
-                </Alert>
-              ) : legalEntities.length === 0 ? (
-                <Alert variant="warning" className="py-2">
-                  Юридические лица не найдены. Сначала добавьте юридическое лицо.
-                </Alert>
-              ) : (
-                <Form.Select 
-                  value={selectedLegalEntityId}
-                  onChange={(e) => setSelectedLegalEntityId(e.target.value)}
-                  className="bg-dark text-light border-secondary"
-                  required
-                >
-                  <option value="">Выберите юридическое лицо</option>
-                  {legalEntities.map(entity => (
-                    <option key={entity.id} value={entity.id}>
-                      {entity.title} (ИНН: {entity.inn})
-                    </option>
-                  ))}
-                </Form.Select>
-              )}
+              <div className="d-flex justify-content-between align-items-center mb-2">
+                {legalEntitiesLoading ? (
+                  <div className="text-center py-2 w-100">
+                    <Spinner animation="border" size="sm" />
+                    <span className="ms-2">Загрузка юридических лиц...</span>
+                  </div>
+                ) : legalEntitiesError ? (
+                  <Alert variant="danger" className="py-2 w-100">
+                    <div className="d-flex justify-content-between align-items-center">
+                      <span>Ошибка загрузки юридических лиц: {legalEntitiesError}</span>
+                      <Button 
+                        variant="outline-light" 
+                        size="sm" 
+                        onClick={handleRefreshLegalEntities}
+                        disabled={refreshingLegalEntities}
+                      >
+                        <i className="bi bi-arrow-clockwise"></i>
+                      </Button>
+                    </div>
+                  </Alert>
+                ) : legalEntities.length === 0 ? (
+                  <Alert variant="warning" className="py-2 w-100">
+                    <div className="d-flex justify-content-between align-items-center">
+                      <span>Юридические лица не найдены. Сначала добавьте юридическое лицо.</span>
+                      <Button 
+                        variant="outline-warning" 
+                        size="sm" 
+                        onClick={handleRefreshLegalEntities}
+                        disabled={refreshingLegalEntities}
+                      >
+                        <i className="bi bi-arrow-clockwise"></i>
+                      </Button>
+                    </div>
+                  </Alert>
+                ) : (
+                  <>
+                    <Form.Select 
+                      value={selectedLegalEntityId}
+                      onChange={(e) => setSelectedLegalEntityId(e.target.value)}
+                      className="bg-dark text-light border-secondary me-2"
+                      required
+                    >
+                      <option value="">Выберите юридическое лицо</option>
+                      {legalEntities.map(entity => (
+                        <option key={entity.id} value={entity.id}>
+                          {entity.title} (ИНН: {entity.inn})
+                        </option>
+                      ))}
+                    </Form.Select>
+                    <Button 
+                      variant="outline-secondary" 
+                      size="sm" 
+                      onClick={handleRefreshLegalEntities}
+                      disabled={refreshingLegalEntities}
+                      title="Обновить список юридических лиц"
+                    >
+                      {refreshingLegalEntities ? (
+                        <Spinner animation="border" size="sm" />
+                      ) : (
+                        <i className="bi bi-arrow-clockwise"></i>
+                      )}
+                    </Button>
+                  </>
+                )}
+              </div>
               <Form.Text className="text-muted">
                 Юридическое лицо, к которому будет привязан токен
               </Form.Text>
@@ -828,4 +1069,4 @@ const Wildberries: React.FC = () => {
   );
 };
 
-export default Wildberries; 
+export default Wildberries;
