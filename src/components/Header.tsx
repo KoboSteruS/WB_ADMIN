@@ -104,11 +104,6 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
         </div>
 
         <div className="d-flex align-items-center">
-          
-          {/* Переключатель темы */}
-          <div className="theme-container me-3 d-none d-md-block">
-            <ThemeSwitcher variant="icon" size="sm" />
-          </div>
           {/* Аккаунт */}
           <div className="account-container">
             <Dropdown onToggle={(isOpen: boolean) => setShowAccountMenu(isOpen)}>

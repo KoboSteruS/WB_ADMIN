@@ -1,15 +1,174 @@
 import React, { useEffect, useState } from 'react';
-import { Container, Row, Col, Card, Alert } from 'react-bootstrap';
+import { Container, Row, Col, Alert, Table, Button, Form } from 'react-bootstrap';
+import Spinner from 'react-bootstrap/Spinner';
+import Modal from 'react-bootstrap/Modal';
 import './Dashboard.css';
 
+interface LegalEntity {
+  id: string;
+  title: string;
+  inn: string;
+}
+
 const Dashboard: React.FC = () => {
-  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [legalEntities, setLegalEntities] = useState<LegalEntity[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState<boolean>(false);
+  const [newEntity, setNewEntity] = useState<{ title: string; inn: string }>({ title: '', inn: '' });
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false);
+  const [entityToDelete, setEntityToDelete] = useState<LegalEntity | null>(null);
+  const [deleting, setDeleting] = useState<boolean>(false);
+
+  const fetchLegalEntities = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('http://62.113.44.196:8080/api/v1/account-ip/', {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ошибка HTTP: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (Array.isArray(data)) {
+        setLegalEntities(data);
+      } else {
+        setError('Получен неожиданный формат данных');
+      }
+    } catch (error: any) {
+      setError(`Ошибка при загрузке данных: ${error.message}`);
+      console.error('Ошибка при запросе:', error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    // Получаем токен из localStorage при монтировании компонента
-    const token = localStorage.getItem('auth_token');
-    setAuthToken(token);
+    fetchLegalEntities();
   }, []);
+
+  const handleClose = () => {
+    setShowModal(false);
+    setNewEntity({ title: '', inn: '' });
+    setSubmitError(null);
+  };
+
+  const handleShow = () => setShowModal(true);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setNewEntity(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!newEntity.title.trim() || !newEntity.inn.trim()) {
+      setSubmitError('Необходимо заполнить все поля');
+      return;
+    }
+    
+    try {
+      setSubmitting(true);
+      setSubmitError(null);
+      
+      const response = await fetch('http://62.113.44.196:8080/api/v1/account-ip/', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          'title': newEntity.title,
+          'inn': newEntity.inn
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(
+          errorData ? JSON.stringify(errorData) : `HTTP Error: ${response.status}`
+        );
+      }
+
+      const data = await response.json();
+      console.log('Успешно добавлено юр. лицо:', data);
+      
+      // Обновляем список юр. лиц
+      await fetchLegalEntities();
+      
+      // Закрываем модальное окно
+      handleClose();
+    } catch (error: any) {
+      console.error('Ошибка при создании юр. лица:', error);
+      setSubmitError(`Ошибка при создании: ${error.message}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleShowDeleteConfirm = (entity: LegalEntity) => {
+    setEntityToDelete(entity);
+    setShowDeleteModal(true);
+  };
+
+  const handleCloseDeleteModal = () => {
+    setShowDeleteModal(false);
+    setEntityToDelete(null);
+  };
+
+  const handleDeleteEntity = async () => {
+    if (!entityToDelete) return;
+
+    try {
+      setDeleting(true);
+      
+      const response = await fetch(`http://62.113.44.196:8080/api/v1/account-ip/${entityToDelete.id}/`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133'
+        }
+      });
+      
+      console.log('Response status:', response.status);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP Error: ${response.status}`);
+      }
+      
+      try {
+        const text = await response.text();
+        if (text) {
+          const data = JSON.parse(text);
+          console.log('Success:', data);
+        } else {
+          console.log('Empty response body (успешное удаление)');
+        }
+      } catch (error) {
+        console.log('Не JSON ответ или пустой ответ (успешное удаление)');
+      }
+      
+      // Обновляем список юр. лиц
+      await fetchLegalEntities();
+      
+      // Закрываем модальное окно
+      handleCloseDeleteModal();
+    } catch (error: any) {
+      console.error('Ошибка при удалении юр. лица:', error);
+      alert(`Ошибка при удалении: ${error.message}`);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <Container fluid className="dashboard-container">
@@ -19,17 +178,6 @@ const Dashboard: React.FC = () => {
           <p className="text-muted">Обзор ваших маркетплейсов и продаж</p>
         </Col>
       </Row>
-
-      {authToken && (
-        <Row className="mb-4">
-          <Col>
-            <Alert variant="success" className="mb-0">
-              <i className="bi bi-key me-2"></i>
-              <strong>Токен авторизации:</strong> {authToken}
-            </Alert>
-          </Col>
-        </Row>
-      )}
 
       <Row className="mb-4">
         <Col>
@@ -41,94 +189,154 @@ const Dashboard: React.FC = () => {
       </Row>
 
       <Row className="mb-4">
-        <Col lg={6} className="mb-4 mb-lg-0">
-          <Card className="h-100">
-            <Card.Header className="d-flex justify-content-between align-items-center">
-              <div>
-                <h5 className="mb-0">Количество</h5>
-                <small className="text-muted">данные за 30 дней</small>
-              </div>
-              <div className="text-end">
-                <small className="text-muted d-block">C 17.03.2023 по 15.04.2023</small>
-              </div>
-            </Card.Header>
-            <Card.Body>
-              <div className="chart-placeholder" style={{ height: '250px' }}>
-                <div className="chart-info">
-                  <div className="chart-legend">
-                    <span className="chart-legend-item">
-                      <span className="chart-legend-color bg-success"></span>
-                      <span className="chart-legend-text">Заказы</span>
-                    </span>
-                    <span className="chart-legend-item">
-                      <span className="chart-legend-color bg-danger"></span>
-                      <span className="chart-legend-text">Продажи</span>
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col lg={6}>
-          <Card className="h-100">
-            <Card.Header className="d-flex justify-content-between align-items-center">
-              <div>
-                <h5 className="mb-0">Сумма</h5>
-                <small className="text-muted">данные за 30 дней</small>
-              </div>
-              <div className="text-end">
-                <small className="text-muted d-block">C 17.03.2023 по 15.04.2023</small>
-              </div>
-            </Card.Header>
-            <Card.Body>
-              <div className="chart-placeholder" style={{ height: '250px' }}>
-                <div className="chart-info">
-                  <div className="chart-legend">
-                    <span className="chart-legend-item">
-                      <span className="chart-legend-color bg-success"></span>
-                      <span className="chart-legend-text">Заказы</span>
-                    </span>
-                    <span className="chart-legend-item">
-                      <span className="chart-legend-color bg-danger"></span>
-                      <span className="chart-legend-text">Продажи</span>
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </Card.Body>
-          </Card>
+        <Col>
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <h2 className="section-title mb-0">Юридические лица</h2>
+            <Button variant="primary" onClick={handleShow}>
+              <i className="bi bi-plus-circle me-2"></i>
+              Добавить юр. лицо
+            </Button>
+          </div>
+          
+          {loading ? (
+            <div className="text-center p-4">
+              <Spinner animation="border" role="status">
+                <span className="visually-hidden">Загрузка...</span>
+              </Spinner>
+            </div>
+          ) : error ? (
+            <Alert variant="danger">
+              <i className="bi bi-exclamation-triangle me-2"></i>
+              {error}
+            </Alert>
+          ) : legalEntities.length === 0 ? (
+            <Alert variant="warning">
+              <i className="bi bi-info-circle me-2"></i>
+              Юридические лица не найдены
+            </Alert>
+          ) : (
+            <Table striped bordered hover responsive>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Наименование</th>
+                  <th>ИНН</th>
+                  <th>Действия</th>
+                </tr>
+              </thead>
+              <tbody>
+                {legalEntities.map((entity) => (
+                  <tr key={entity.id}>
+                    <td>{entity.id}</td>
+                    <td>{entity.title}</td>
+                    <td>{entity.inn}</td>
+                    <td className="text-center">
+                      <Button 
+                        variant="danger" 
+                        size="sm" 
+                        onClick={() => handleShowDeleteConfirm(entity)}
+                      >
+                        <i className="bi bi-trash me-1"></i>
+                        Удалить
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
         </Col>
       </Row>
 
-      <Row>
-        <Col lg={6} className="mb-4 mb-lg-0">
-          <Card className="h-100">
-            <Card.Header className="d-flex justify-content-between align-items-center">
-              <div>
-                <h5 className="mb-0">Процент выкупа</h5>
-                <small className="text-muted">данные за 30 дней</small>
-              </div>
-            </Card.Header>
-            <Card.Body>
-              <div className="chart-placeholder" style={{ height: '250px' }}></div>
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col lg={6}>
-          <Card className="h-100">
-            <Card.Header className="d-flex justify-content-between align-items-center">
-              <div>
-                <h5 className="mb-0">Доля по категории</h5>
-                <small className="text-muted">данные за 30 дней</small>
-              </div>
-            </Card.Header>
-            <Card.Body>
-              <div className="chart-placeholder" style={{ height: '250px' }}></div>
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
+      {/* Модальное окно для добавления юр. лица */}
+      <Modal show={showModal} onHide={handleClose}>
+        <Modal.Header closeButton>
+          <Modal.Title>Добавление юридического лица</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {submitError && (
+            <Alert variant="danger" className="mb-3">
+              {submitError}
+            </Alert>
+          )}
+          <Form onSubmit={handleSubmit}>
+            <Form.Group className="mb-3" controlId="formTitle">
+              <Form.Label>Наименование</Form.Label>
+              <Form.Control
+                type="text"
+                name="title"
+                value={newEntity.title}
+                onChange={handleInputChange}
+                placeholder="Введите наименование юр. лица"
+                required
+              />
+            </Form.Group>
+
+            <Form.Group className="mb-3" controlId="formInn">
+              <Form.Label>ИНН</Form.Label>
+              <Form.Control
+                type="text"
+                name="inn"
+                value={newEntity.inn}
+                onChange={handleInputChange}
+                placeholder="Введите ИНН"
+                required
+              />
+            </Form.Group>
+
+            <div className="d-flex justify-content-end">
+              <Button variant="secondary" onClick={handleClose} className="me-2">
+                Отмена
+              </Button>
+              <Button variant="primary" type="submit" disabled={submitting}>
+                {submitting ? (
+                  <>
+                    <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
+                    Сохранение...
+                  </>
+                ) : (
+                  'Сохранить'
+                )}
+              </Button>
+            </div>
+          </Form>
+        </Modal.Body>
+      </Modal>
+
+      {/* Модальное окно подтверждения удаления */}
+      <Modal show={showDeleteModal} onHide={handleCloseDeleteModal}>
+        <Modal.Header closeButton>
+          <Modal.Title>Подтверждение удаления</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {entityToDelete && (
+            <p>
+              Вы действительно хотите удалить юридическое лицо "{entityToDelete.title}" (ИНН: {entityToDelete.inn})?
+              <br />
+              <b>Это действие невозможно отменить.</b>
+            </p>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={handleCloseDeleteModal}>
+            Отмена
+          </Button>
+          <Button 
+            variant="danger" 
+            onClick={handleDeleteEntity} 
+            disabled={deleting}
+          >
+            {deleting ? (
+              <>
+                <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
+                Удаление...
+              </>
+            ) : (
+              'Удалить'
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </Container>
   );
 };

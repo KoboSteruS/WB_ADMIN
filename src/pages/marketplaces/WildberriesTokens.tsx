@@ -10,9 +10,10 @@ import Spinner from 'react-bootstrap/Spinner';
 import Alert from 'react-bootstrap/Alert';
 import AlertLink from '../../components/AlertLink';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPlus, faEdit, faTrash, faCheck, faTimes, faSyncAlt, faQuestion } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faEdit, faTrash, faCheck, faTimes, faSyncAlt, faQuestion, faShoppingCart } from '@fortawesome/free-solid-svg-icons';
 import { wildberriesService } from '../../services/api';
 import Breadcrumb from '../../components/Breadcrumb';
+import Form from 'react-bootstrap/Form';
 
 // Ленивая загрузка модальных окон
 const AddTokenModal = lazy(() => import('../../components/modals/wildberries/AddTokenModal'));
@@ -23,6 +24,10 @@ interface Token {
   id: string;
   name: string;
   token: string;
+  time?: string; // Время окончания токена
+  account_id?: string;
+  account_title?: string;
+  account_inn?: string;
   active: boolean;
   lastChecked?: string;
   isValid?: boolean;
@@ -71,10 +76,14 @@ const WildberriesTokens: React.FC = () => {
       
       // Преобразование типов для соответствия интерфейсу Token
       const mappedTokens: Token[] = (response || []).map((token: any) => ({
-        id: token.id.toString(),
-        name: token.name,
-        token: token.token,
-        active: token.is_active,
+        id: token.id?.toString() || '',
+        name: token.name || token.account_title || 'Токен Wildberries',
+        token: token.token || '',
+        time: token.time || '',
+        account_id: token.account_id?.toString() || '',
+        account_title: token.account_title || '',
+        account_inn: token.account_inn || '',
+        active: token.is_active || false,
         lastChecked: token.last_checked,
         isValid: token.is_valid
       }));
@@ -254,181 +263,145 @@ const WildberriesTokens: React.FC = () => {
     );
   };
 
+  /**
+   * Рендеринг таблицы с токенами
+   */
+  const renderTokensTable = () => {
+    return (
+      <div>
+        <div className="d-flex justify-content-between align-items-center mb-2">
+          <h5 className="mb-0">Список токенов</h5>
+          <small className="text-muted">Всего токенов: {tokens.length}</small>
+        </div>
+        <Table striped bordered hover responsive className="border">
+          <thead className="bg-light">
+            <tr>
+              <th style={{ width: '40px' }}></th>
+              <th>ID</th>
+              <th>Название</th>
+              <th>Токен</th>
+              <th>Дата создания</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tokens.map((token) => (
+              <tr key={token.id}>
+                <td className="text-center">
+                  <Form.Check type="checkbox" id={`check-${token.id}`} />
+                </td>
+                <td>{token.id}</td>
+                <td>{token.name || 'Токен Wildberries'}</td>
+                <td className="text-truncate" style={{ maxWidth: '200px' }}>{token.token}</td>
+                <td>{token.time || '-'}</td>
+                <td>
+                  <div className="d-flex gap-1 justify-content-center">
+                    <Button
+                      variant="outline-primary"
+                      size="sm"
+                      onClick={() => {/* действие для заказов */}}
+                      title="Заказы"
+                    >
+                      <FontAwesomeIcon icon={faShoppingCart} />
+                    </Button>
+                    <Button
+                      variant="outline-secondary"
+                      size="sm"
+                      onClick={() => openEditModal(token)}
+                      title="Редактировать"
+                    >
+                      <FontAwesomeIcon icon={faEdit} />
+                    </Button>
+                    <Button
+                      variant="outline-danger"
+                      size="sm"
+                      onClick={() => openDeleteModal(token)}
+                      title="Удалить"
+                    >
+                      <FontAwesomeIcon icon={faTrash} />
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+        <div className="mt-3">
+          <Button variant="primary" onClick={() => setShowAddModal(true)}>
+            <FontAwesomeIcon icon={faPlus} className="me-2" /> Добавить токен
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <Container fluid className="py-3">
       <Breadcrumb 
         items={[
           { label: 'Главная', path: '/' },
-          { label: 'Настройки маркетплейсов', path: '/marketplace-settings' },
-          { label: 'Wildberries', path: '/marketplace-settings/wildberries' },
-          { label: 'Управление токенами', active: true }
-        ]}
+          { label: 'Маркетплейсы', path: '/marketplaces' },
+          { label: 'Токены Wildberries', active: true }
+        ]} 
       />
-
-      <h1 className="h3 mb-4">Управление токенами Wildberries</h1>
       
-      <Row className="mb-4">
+      <Row className="mb-3">
+        <Col>
+          <div className="d-flex justify-content-between align-items-center">
+            <h1>Токены Wildberries</h1>
+            <div>
+              <Button
+                variant="outline-secondary"
+                onClick={handleRefresh}
+                disabled={refreshing}
+              >
+                <FontAwesomeIcon icon={faSyncAlt} spin={refreshing} /> Обновить
+              </Button>
+            </div>
+          </div>
+        </Col>
+      </Row>
+      
+      <Row className="mb-3">
         <Col>
           <Card>
-            <Card.Header className="d-flex justify-content-between align-items-center">
-              <h5 className="mb-0">Список токенов</h5>
-              <div>
-                <Button 
-                  variant="outline-secondary" 
-                  className="me-2"
-                  onClick={handleRefresh}
-                  disabled={isLoading || refreshing}
-                >
-                  {refreshing ? (
-                    <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true"/>
-                  ) : (
-                    <FontAwesomeIcon icon={faSyncAlt} />
-                  )}
-                  <span className="d-none d-md-inline ms-1">Обновить</span>
-                </Button>
-                <Button 
-                  variant="primary" 
-                  onClick={() => setShowAddModal(true)}
-                >
-                  <FontAwesomeIcon icon={faPlus} />
-                  <span className="ms-1">Добавить токен</span>
-                </Button>
-              </div>
-            </Card.Header>
             <Card.Body>
-              {error && (
-                <Alert variant="danger">
-                  {error}
-                </Alert>
-              )}
-              
               {isLoading ? (
                 <div className="text-center py-5">
                   <Spinner animation="border" variant="primary" />
                   <p className="mt-3">Загрузка токенов...</p>
                 </div>
+              ) : error ? (
+                <Alert variant="danger">
+                  <Alert.Heading>Ошибка загрузки</Alert.Heading>
+                  <p>{error}</p>
+                  <hr />
+                  <div className="d-flex justify-content-end">
+                    <Button variant="outline-danger" onClick={handleRefresh}>
+                      <FontAwesomeIcon icon={faSyncAlt} className="me-2" /> Повторить
+                    </Button>
+                  </div>
+                </Alert>
               ) : tokens.length === 0 ? (
                 <Alert variant="info">
-                  Токены Wildberries не найдены. Добавьте токен для работы с API Wildberries.
+                  <Alert.Heading>Нет токенов</Alert.Heading>
+                  <p>
+                    У вас пока нет добавленных токенов Wildberries. 
+                    Добавьте новый токен, чтобы начать работу с API Wildberries.
+                  </p>
+                  <hr />
+                  <p className="mb-0">
+                    Как получить токен? <AlertLink href="https://openapi.wildberries.ru/">Документация Wildberries API</AlertLink>
+                  </p>
                 </Alert>
               ) : (
-                <div className="table-responsive">
-                  <Table striped hover>
-                    <thead>
-                      <tr>
-                        <th>Название</th>
-                        <th>Токен</th>
-                        <th>Статус</th>
-                        <th>Валидность</th>
-                        <th>Действия</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {tokens.map(token => (
-                        <tr key={token.id}>
-                          <td>{token.name}</td>
-                          <td>
-                            <code>
-                              {token.token.substring(0, 7)}...
-                              {token.token.substring(token.token.length - 7)}
-                            </code>
-                          </td>
-                          <td>
-                            {token.active ? (
-                              <Badge bg="success">Активен</Badge>
-                            ) : (
-                              <Badge bg="secondary">Неактивен</Badge>
-                            )}
-                          </td>
-                          <td>{renderTokenValidity(token)}</td>
-                          <td>
-                            <div className="btn-group">
-                              <Button 
-                                variant="outline-primary" 
-                                size="sm" 
-                                onClick={() => openEditModal(token)}
-                                title="Редактировать"
-                              >
-                                <FontAwesomeIcon icon={faEdit} />
-                              </Button>
-                              
-                              <Button 
-                                variant="outline-secondary" 
-                                size="sm" 
-                                onClick={() => handleToggleTokenActive(token.id, token.active)}
-                                disabled={togglingTokenId === token.id}
-                                title={token.active ? "Деактивировать" : "Активировать"}
-                              >
-                                {togglingTokenId === token.id ? (
-                                  <Spinner animation="border" size="sm" />
-                                ) : token.active ? (
-                                  <FontAwesomeIcon icon={faTimes} />
-                                ) : (
-                                  <FontAwesomeIcon icon={faCheck} />
-                                )}
-                              </Button>
-                              
-                              <Button 
-                                variant="outline-info" 
-                                size="sm" 
-                                onClick={() => handleTestToken(token.id)}
-                                disabled={testingTokenId === token.id}
-                                title="Проверить токен"
-                              >
-                                {testingTokenId === token.id ? (
-                                  <Spinner animation="border" size="sm" />
-                                ) : (
-                                  <FontAwesomeIcon icon={faSyncAlt} />
-                                )}
-                              </Button>
-                              
-                              <Button 
-                                variant="outline-danger" 
-                                size="sm" 
-                                onClick={() => openDeleteModal(token)}
-                                title="Удалить"
-                              >
-                                <FontAwesomeIcon icon={faTrash} />
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </Table>
-                </div>
+                renderTokensTable()
               )}
             </Card.Body>
           </Card>
         </Col>
       </Row>
-      
-      <Row>
-        <Col>
-          <Card>
-            <Card.Header>
-              <h5 className="mb-0">Как получить токен Wildberries</h5>
-            </Card.Header>
-            <Card.Body>
-              <ol>
-                <li>Войдите в личный кабинет продавца Wildberries.</li>
-                <li>Перейдите в раздел <strong>Настройки</strong> &rarr; <strong>Доступ к API</strong>.</li>
-                <li>Нажмите кнопку <strong>Создать новый токен</strong>.</li>
-                <li>Укажите название токена (для внутреннего использования) и выберите необходимые права доступа.</li>
-                <li>Скопируйте сгенерированный токен (обратите внимание, что токен показывается только один раз).</li>
-                <li>Введите полученный токен в форму добавления на этой странице.</li>
-              </ol>
-              <Alert variant="info">
-                Подробную информацию о работе с API Wildberries можно найти в&nbsp;
-                <AlertLink href="https://openapi.wb.ru/" target="_blank" rel="noopener noreferrer">
-                  официальной документации
-                </AlertLink>.
-              </Alert>
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
-      
+
       {/* Модальные окна */}
       <Suspense fallback={<div>Загрузка...</div>}>
         {showAddModal && (
@@ -440,11 +413,11 @@ const WildberriesTokens: React.FC = () => {
         )}
         
         {showEditModal && selectedToken && (
-          <EditTokenModal
+          <EditTokenModal 
             show={showEditModal}
             onHide={() => setShowEditModal(false)}
-            onSubmit={handleEditToken}
             token={selectedToken}
+            onSubmit={handleEditToken}
           />
         )}
         
@@ -452,8 +425,8 @@ const WildberriesTokens: React.FC = () => {
           <DeleteTokenModal
             show={showDeleteModal}
             onHide={() => setShowDeleteModal(false)}
-            onDelete={handleDeleteToken}
             token={selectedToken}
+            onDelete={() => handleDeleteToken(selectedToken.id)}
           />
         )}
       </Suspense>

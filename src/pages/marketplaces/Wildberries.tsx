@@ -22,7 +22,19 @@ interface WbToken {
   name?: string;
   is_active?: boolean;
   updated_at?: string;
+  account_id?: number;
+  account_title?: string;
+  account_inn?: string;
   [key: string]: any;
+}
+
+/**
+ * Интерфейс для данных юридического лица
+ */
+interface LegalEntity {
+  id: string;
+  title: string;
+  inn: string;
 }
 
 /**
@@ -36,10 +48,16 @@ const Wildberries: React.FC = () => {
   const [selectAll, setSelectAll] = useState<boolean>(false);
   const navigate = useNavigate();
   
+  // Состояния для юридических лиц
+  const [legalEntities, setLegalEntities] = useState<LegalEntity[]>([]);
+  const [legalEntitiesLoading, setLegalEntitiesLoading] = useState<boolean>(true);
+  const [legalEntitiesError, setLegalEntitiesError] = useState<string | null>(null);
+  
   // Состояния для модального окна добавления токена
   const [showAddTokenModal, setShowAddTokenModal] = useState<boolean>(false);
   const [newTokenName, setNewTokenName] = useState<string>('');
   const [newToken, setNewToken] = useState<string>('');
+  const [selectedLegalEntityId, setSelectedLegalEntityId] = useState<string>('');
   const [tokenAddLoading, setTokenAddLoading] = useState<boolean>(false);
   const [tokenAddError, setTokenAddError] = useState<string | null>(null);
   const [tokenAddSuccess, setTokenAddSuccess] = useState<boolean>(false);
@@ -51,9 +69,10 @@ const Wildberries: React.FC = () => {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteSuccess, setDeleteSuccess] = useState<boolean>(false);
 
-  // Загрузка токенов при монтировании компонента
+  // Загрузка токенов и юр. лиц при монтировании компонента
   useEffect(() => {
     fetchTokens();
+    fetchLegalEntities();
   }, []);
 
   // Функция для получения токенов
@@ -80,7 +99,12 @@ const Wildberries: React.FC = () => {
         console.log('Успешно получено токенов:', data.length);
         data.forEach(token => {
           console.log('---');
-          console.log('Весь токен:', token);
+          console.log('ID:', token.id);
+          console.log('TOKEN:', token.token);
+          console.log('Time:', token.created_at);
+          console.log('Account_id:', token.account_ip || '-');
+          console.log('Account_title:', token.account_title || 'TestIP');
+          console.log('Account_inn:', token.account_inn || '123');
         });
       } else {
         console.log('Ответ сервера не является массивом:', data);
@@ -95,6 +119,44 @@ const Wildberries: React.FC = () => {
       console.error('Ошибка при запросе:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Функция для получения списка юридических лиц
+  const fetchLegalEntities = async () => {
+    try {
+      setLegalEntitiesLoading(true);
+      setLegalEntitiesError(null);
+      
+      const response = await fetch('http://62.113.44.196:8080/api/v1/account-ip/', {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ошибка HTTP: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (Array.isArray(data)) {
+        setLegalEntities(data);
+        console.log('Успешно получено юр. лиц:', data.length);
+      } else {
+        console.log('Ответ сервера не является массивом:', data);
+        setLegalEntitiesError('Неверный формат данных от сервера');
+      }
+    } catch (err) {
+      if (err instanceof Error) {
+        setLegalEntitiesError(err.message);
+      } else {
+        setLegalEntitiesError('Произошла ошибка при загрузке юридических лиц');
+      }
+      console.error('Ошибка при запросе юр. лиц:', err);
+    } finally {
+      setLegalEntitiesLoading(false);
     }
   };
 
@@ -169,15 +231,27 @@ const Wildberries: React.FC = () => {
       return;
     }
     
+    if (!selectedLegalEntityId) {
+      setTokenAddError('Необходимо выбрать юридическое лицо');
+      return;
+    }
+    
     setTokenAddLoading(true);
     setTokenAddError(null);
     setTokenAddSuccess(false);
     
     try {
       const url = "http://62.113.44.196:8080/api/v1/wb-tokens/";
+      
+      // Только для отладки в консоли
+      if (newTokenName) {
+        console.log('Название токена (не отправляется):', newTokenName);
+      }
+      
+      // Отправляем токен и account_ip в числовом формате
       const data = {
         token: newToken.trim(),
-        name: newTokenName.trim() || undefined
+        account_ip: parseInt(selectedLegalEntityId, 10) // Преобразуем в число
       };
       
       console.log('Отправляемые данные:', data);
@@ -186,17 +260,30 @@ const Wildberries: React.FC = () => {
         method: "POST",
         headers: {
           'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133',
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "Accept": "application/json"
         },
         body: JSON.stringify(data)
       });
       
       console.log('Статус ответа:', response.status);
       
-      const text = await response.text();
-      console.log('Текст ответа:', text);
+      let responseData;
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.indexOf("application/json") !== -1) {
+        responseData = await response.json();
+        console.log('JSON ответ:', responseData);
+      } else {
+        const text = await response.text();
+        console.log('Текстовый ответ:', text);
+        try {
+          responseData = JSON.parse(text);
+        } catch (e) {
+          responseData = { message: text };
+        }
+      }
       
-      if (response.status >= 200 && response.status < 300) {
+      if (response.ok) {
         console.log('Токен успешно добавлен');
         setTokenAddSuccess(true);
         
@@ -207,25 +294,52 @@ const Wildberries: React.FC = () => {
         setTimeout(() => {
           setNewToken('');
           setNewTokenName('');
+          setSelectedLegalEntityId('');
           setTokenAddSuccess(false);
           setShowAddTokenModal(false);
         }, 2000);
       } else {
-        // Пытаемся распарсить JSON с ошибкой
-        try {
-          const errorData = JSON.parse(text);
-          const errorMessage = errorData.detail || errorData.error || errorData.message || 
-                              JSON.stringify(errorData);
-          setTokenAddError(errorMessage);
-        } catch (e) {
-          // Если не удалось распарсить, выводим просто текст
-          setTokenAddError(text || 'Ошибка при добавлении токена');
+        // Обработка ошибок от API
+        let errorMessage = 'Ошибка при добавлении токена';
+        
+        if (responseData) {
+          if (typeof responseData === 'string') {
+            errorMessage = responseData;
+          } else if (responseData.detail) {
+            errorMessage = responseData.detail;
+          } else if (responseData.message) {
+            errorMessage = responseData.message;
+          } else if (responseData.error) {
+            errorMessage = responseData.error;
+          } else if (responseData.non_field_errors) {
+            errorMessage = Array.isArray(responseData.non_field_errors) 
+              ? responseData.non_field_errors.join('. ') 
+              : responseData.non_field_errors;
+          } else {
+            // Проверяем, есть ли ошибки для конкретных полей
+            const fieldErrors = [];
+            for (const [field, errors] of Object.entries(responseData)) {
+              if (Array.isArray(errors)) {
+                fieldErrors.push(`${field}: ${errors.join(', ')}`);
+              } else if (typeof errors === 'string') {
+                fieldErrors.push(`${field}: ${errors}`);
+              }
+            }
+            
+            if (fieldErrors.length > 0) {
+              errorMessage = fieldErrors.join('. ');
+            } else {
+              errorMessage = `Ошибка ${response.status}: ${JSON.stringify(responseData)}`;
+            }
+          }
         }
+        
+        setTokenAddError(errorMessage);
       }
     } catch (error) {
       console.error('Ошибка при отправке запроса:', error);
       if (error instanceof Error) {
-        setTokenAddError(error.message);
+        setTokenAddError(`Ошибка сети: ${error.message}`);
       } else {
         setTokenAddError('Неизвестная ошибка при добавлении токена');
       }
@@ -239,6 +353,7 @@ const Wildberries: React.FC = () => {
     setShowAddTokenModal(false);
     setNewToken('');
     setNewTokenName('');
+    setSelectedLegalEntityId('');
     setTokenAddError(null);
     setTokenAddSuccess(false);
   };
@@ -347,16 +462,16 @@ const Wildberries: React.FC = () => {
           
           <Card>
             <Card.Header className="d-flex justify-content-between align-items-center">
-              <h5 className="mb-0">Список токенов</h5>
+              <h5 className="mb-0">Токены API</h5>
               {!loading && (
                 <span className="text-muted">Всего токенов: {tokens.length}</span>
               )}
             </Card.Header>
             <Card.Body>
               {loading ? (
-                <div className="text-center py-5">
-                  <Spinner animation="border" variant="primary" />
-                  <p className="mt-3">Загрузка токенов...</p>
+                <div className="text-center py-3">
+                  <Spinner animation="border" />
+                  <p className="mt-2">Загрузка токенов...</p>
                 </div>
               ) : tokens.length === 0 ? (
                 <div className="text-center py-5">
@@ -370,10 +485,10 @@ const Wildberries: React.FC = () => {
                 </div>
               ) : (
                 <div className="table-responsive">
-                  <Table hover bordered striped>
+                  <Table striped bordered hover className="mb-0">
                     <thead>
                       <tr>
-                        <th>
+                        <th style={{ width: '40px' }}>
                           <Form.Check
                             type="checkbox"
                             checked={selectAll}
@@ -382,17 +497,18 @@ const Wildberries: React.FC = () => {
                           />
                         </th>
                         <th>ID</th>
-                        <th>Название</th>
-                        <th>Токен</th>
-                        <th>Дата создания</th>
-                        <th>Статус</th>
+                        <th>TOKEN</th>
+                        <th>Time</th>
+                        <th>Account_id</th>
+                        <th>Account_title</th>
+                        <th>Account_inn</th>
                         <th>Действия</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {tokens.map(token => (
+                      {tokens.map((token) => (
                         <tr key={token.id}>
-                          <td>
+                          <td className="text-center">
                             <Form.Check
                               type="checkbox"
                               checked={selectedTokens.has(token.id)}
@@ -401,27 +517,35 @@ const Wildberries: React.FC = () => {
                             />
                           </td>
                           <td>{token.id}</td>
-                          <td>{token.name || 'Токен Wildberries'}</td>
-                          <td title={token.token}>{formatToken(token.token)}</td>
-                          <td>{formatDate(token.created_at)}</td>
                           <td>
-                            {token.is_active !== undefined ? (
-                              <span className={`badge bg-${token.is_active ? 'success' : 'danger'}`}>
-                                {token.is_active ? 'Активен' : 'Неактивен'}
-                              </span>
-                            ) : (
-                              <span className="badge bg-secondary">Неизвестно</span>
-                            )}
+                            <div className="text-truncate" style={{ maxWidth: '300px' }}>
+                              {token.token}
+                            </div>
+                            <Button 
+                              variant="link" 
+                              size="sm" 
+                              className="p-0" 
+                              onClick={() => {
+                                navigator.clipboard.writeText(token.token);
+                                alert('Токен скопирован в буфер обмена');
+                              }}
+                            >
+                              Копировать
+                            </Button>
                           </td>
+                          <td>{token.created_at || '-'}</td>
+                          <td>{token.account_ip || '-'}</td>
+                          <td>{token.account_title || 'TestIP'}</td>
+                          <td>{token.account_inn || '123'}</td>
                           <td>
-                            <div className="d-flex gap-2">
+                            <div className="d-flex gap-2 justify-content-center">
                               <Button 
                                 variant="outline-primary" 
                                 size="sm"
                                 onClick={() => handleViewOrders(token.id)}
                                 title="Просмотреть заказы по этому токену"
                               >
-                                <i className="bi bi-box"></i> Заказы
+                                <i className="bi bi-box"></i>
                               </Button>
                               <Button 
                                 variant="outline-secondary" 
@@ -520,6 +644,41 @@ const Wildberries: React.FC = () => {
           
           <Form onSubmit={handleAddToken}>
             <Form.Group className="mb-3">
+              <Form.Label className="text-light">Выберите юридическое лицо</Form.Label>
+              {legalEntitiesLoading ? (
+                <div className="text-center py-2">
+                  <Spinner animation="border" size="sm" />
+                  <span className="ms-2">Загрузка юридических лиц...</span>
+                </div>
+              ) : legalEntitiesError ? (
+                <Alert variant="danger" className="py-2">
+                  Ошибка загрузки юридических лиц: {legalEntitiesError}
+                </Alert>
+              ) : legalEntities.length === 0 ? (
+                <Alert variant="warning" className="py-2">
+                  Юридические лица не найдены. Сначала добавьте юридическое лицо.
+                </Alert>
+              ) : (
+                <Form.Select 
+                  value={selectedLegalEntityId}
+                  onChange={(e) => setSelectedLegalEntityId(e.target.value)}
+                  className="bg-dark text-light border-secondary"
+                  required
+                >
+                  <option value="">Выберите юридическое лицо</option>
+                  {legalEntities.map(entity => (
+                    <option key={entity.id} value={entity.id}>
+                      {entity.title} (ИНН: {entity.inn})
+                    </option>
+                  ))}
+                </Form.Select>
+              )}
+              <Form.Text className="text-muted">
+                Юридическое лицо, к которому будет привязан токен
+              </Form.Text>
+            </Form.Group>
+            
+            <Form.Group className="mb-3">
               <Form.Label className="text-light">Название токена</Form.Label>
               <Form.Control
                 type="text"
@@ -559,7 +718,7 @@ const Wildberries: React.FC = () => {
               <Button 
                 variant="primary" 
                 type="submit" 
-                disabled={tokenAddLoading || !newToken.trim()}
+                disabled={tokenAddLoading || !newToken.trim() || legalEntitiesLoading || !selectedLegalEntityId}
               >
                 {tokenAddLoading ? (
                   <>

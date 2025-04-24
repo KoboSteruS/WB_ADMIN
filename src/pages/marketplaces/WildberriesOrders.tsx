@@ -17,14 +17,14 @@ import { useNavigate } from 'react-router-dom';
  * Интерфейс для данных заказа Wildberries
  */
 interface WbOrder {
-  id: number;
+  id?: number;
   address?: string | null;
   ddate?: string | null;
-  sale_price?: string;
+  sale_price?: string | number;
   required_meta?: any[];
   delivery_type?: string;
   comment?: string;
-  scan_price?: string | null;
+  scan_price?: string | number | null;
   order_uid?: string;
   article?: string;
   color_code?: string;
@@ -32,12 +32,12 @@ interface WbOrder {
   created_at?: string;
   offices?: string[];
   skus?: string[];
-  order_id?: string;
+  order_id?: string | number;
   warehouse_id?: number;
   nm_id?: number;
   chrt_id?: number;
-  price?: string;
-  converted_price?: string;
+  price?: string | number;
+  converted_price?: string | number;
   currency_code?: number;
   converted_currency_code?: number;
   cargo_type?: number;
@@ -63,7 +63,7 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
   const [orders, setOrders] = useState<WbOrder[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedOrders, setSelectedOrders] = useState<Set<number>>(new Set());
+  const [selectedOrders, setSelectedOrders] = useState<Set<number | string>>(new Set());
   const [selectAll, setSelectAll] = useState<boolean>(false);
   const [showTestData, setShowTestData] = useState<boolean>(false);
   const [rawResponse, setRawResponse] = useState<string>('');
@@ -77,31 +77,65 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
   const [tokenAddError, setTokenAddError] = useState<string | null>(null);
   const [tokenAddSuccess, setTokenAddSuccess] = useState<boolean>(false);
   
-  // Тестовые данные для таблицы
+  // Тестовые данные для таблицы, обновленные с дополнительными полями
   const testOrders: WbOrder[] = [
     {
       id: 1,
-      ddate: '2023-07-15',
-      createdAt: '2023-07-10',
-      article: 'WB123456',
-      nmId: 123456,
-      skus: ['sku1', 'sku2'],
-      salePrice: 1500,
-      comment: 'Тестовый заказ 1',
-      offices: ['Офис 1', 'Офис 2'],
-      status: 'completed'
+      address: null,
+      ddate: null,
+      sale_price: 66300.00,
+      required_meta: [],
+      delivery_type: 'fbs',
+      comment: '',
+      scan_price: null,
+      order_uid: '12908181_7068212498275133801',
+      article: 'PURE Testobuster 120 capsul',
+      color_code: '',
+      rid: '7068212498275133801.0.0',
+      created_at: '2025-04-23T09:40:34+03:00',
+      offices: ['Москва_Восток'],
+      skus: ['2039371154416'],
+      order_id: 3266581928,
+      warehouse_id: 881268,
+      nm_id: 203084307,
+      chrt_id: 327271177,
+      price: 59600.00,
+      converted_price: 59600.00,
+      currency_code: 643,
+      converted_currency_code: 643,
+      cargo_type: 1,
+      is_zero_order: false,
+      options: {isB2B: false},
+      wb_token: 1
     },
     {
       id: 2,
-      ddate: '2023-07-20',
-      createdAt: '2023-07-12',
-      article: 'WB789012',
-      nmId: 789012,
-      skus: ['sku3'],
-      salePrice: 2500,
-      comment: 'Тестовый заказ 2',
-      offices: ['Офис 3'],
-      status: 'in_progress'
+      address: null,
+      ddate: null,
+      sale_price: 55000.00,
+      required_meta: [],
+      delivery_type: 'fbs',
+      comment: '',
+      scan_price: null,
+      order_uid: '12908182_7068212498275133802',
+      article: 'PURE Testobuster 60 capsul',
+      color_code: '',
+      rid: '7068212498275133802.0.0',
+      created_at: '2025-04-23T10:45:22+03:00',
+      offices: ['Москва_Запад'],
+      skus: ['2039371154417'],
+      order_id: 3266581929,
+      warehouse_id: 881268,
+      nm_id: 203084308,
+      chrt_id: 327271178,
+      price: 45000.00,
+      converted_price: 45000.00,
+      currency_code: 643,
+      converted_currency_code: 643,
+      cargo_type: 1,
+      is_zero_order: false,
+      options: {isB2B: false},
+      wb_token: 1
     }
   ];
 
@@ -284,7 +318,7 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
   };
 
   // Обработчик выбора одного заказа
-  const handleSelectOrder = (id: number) => {
+  const handleSelectOrder = (id: number | string) => {
     const newSelected = new Set(selectedOrders);
     if (newSelected.has(id)) {
       newSelected.delete(id);
@@ -304,7 +338,7 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
     if (selectAll) {
       setSelectedOrders(new Set());
     } else {
-      setSelectedOrders(new Set(items.map(order => order.id)));
+      setSelectedOrders(new Set(items.map(order => order.id || order.order_id || 0)));
     }
     setSelectAll(!selectAll);
   };
@@ -529,32 +563,39 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
                             aria-label="Выбрать все заказы"
                           />
                         </th>
-                        <th>ID</th>
+                        <th>ID заказа</th>
                         <th>Дата создания</th>
-                        <th>№ заказа</th>
+                        <th>Order UID</th>
                         <th>Артикул</th>
                         <th>NM ID</th>
-                        <th>SKUs</th>
+                        <th>Штрихкоды</th>
                         <th>Цена продажи</th>
+                        <th>Цена закупки</th>
                         <th>Офисы</th>
                         <th>Тип доставки</th>
+                        <th>Warehouse ID</th>
+                        <th>Cargo Type</th>
+                        <th>RID</th>
+                        <th>CHRT ID</th>
+                        <th>B2B</th>
+                        <th>Токен WB</th>
                         <th>Комментарий</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {displayOrders.map(order => (
-                        <tr key={order.id}>
+                      {displayOrders.map((order, index) => (
+                        <tr key={order.id || order.order_id || index}>
                           <td>
                             <Form.Check
                               type="checkbox"
-                              checked={selectedOrders.has(order.id)}
-                              onChange={() => handleSelectOrder(order.id)}
-                              aria-label={`Выбрать заказ ${order.id}`}
+                              checked={selectedOrders.has(order.id || index)}
+                              onChange={() => handleSelectOrder(order.id || index)}
+                              aria-label={`Выбрать заказ ${order.id || order.order_id || index}`}
                             />
                           </td>
-                          <td>{order.id}</td>
+                          <td>{order.order_id || '—'}</td>
                           <td>{formatDate(order.created_at)}</td>
-                          <td>{order.order_uid || order.order_id || '—'}</td>
+                          <td>{order.order_uid || '—'}</td>
                           <td>{order.article || '—'}</td>
                           <td>{order.nm_id || '—'}</td>
                           <td>
@@ -562,7 +603,8 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
                               ? order.skus.join(', ') 
                               : '—'}
                           </td>
-                          <td>{formatPrice(order.sale_price || order.price)}</td>
+                          <td>{formatPrice(order.sale_price)}</td>
+                          <td>{formatPrice(order.price)}</td>
                           <td>
                             {order.offices && order.offices.length > 0 
                               ? order.offices.join(', ') 
@@ -573,6 +615,12 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
                               ? <Badge bg="primary">{order.delivery_type.toUpperCase()}</Badge>
                               : '—'}
                           </td>
+                          <td>{order.warehouse_id || '—'}</td>
+                          <td>{order.cargo_type || '—'}</td>
+                          <td>{order.rid || '—'}</td>
+                          <td>{order.chrt_id || '—'}</td>
+                          <td>{order.options?.isB2B ? 'Да' : 'Нет'}</td>
+                          <td>{order.wb_token || '—'}</td>
                           <td>{order.comment || '—'}</td>
                         </tr>
                       ))}
