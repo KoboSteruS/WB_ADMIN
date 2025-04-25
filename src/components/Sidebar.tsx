@@ -38,17 +38,25 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
           </Link>
         </li>
         
+
+        
         <li className={`sidebar-item has-submenu ${isSubActive('/marketplace-settings') ? 'active' : ''}`}>
           <div 
             className={`sidebar-link ${expandedMenus.marketplaces ? 'expanded' : ''}`}
             onClick={() => toggleSubmenu('marketplaces')}
           >
             <i className="bi bi-shop me-3"></i>
-            <span className="sidebar-text">Настройки маркетплейсов</span>
+            <span className="sidebar-text">Настройки</span>
             <i className={`bi ${expandedMenus.marketplaces ? 'bi-chevron-down' : 'bi-chevron-right'} ms-auto submenu-icon`}></i>
           </div>
           
           <ul className={`submenu ${expandedMenus.marketplaces ? 'show' : ''}`}>
+            <li className={`sidebar-item ${isActive('/legal-entities') ? 'active' : ''}`}>
+              <Link to="/legal-entities" className="sidebar-link">
+                <i className="bi bi-building me-3"></i>
+                <span className="sidebar-text">Юридические лица</span>
+              </Link>
+            </li>
             <li className={`submenu-item ${isActive('/marketplace-settings/wildberries') ? 'active' : ''}`}>
               <Link to="/marketplace-settings/wildberries" className="submenu-link">
                 <span className="sidebar-text">Wildberries</span>

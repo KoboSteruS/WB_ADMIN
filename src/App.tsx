@@ -15,6 +15,7 @@ import OzonTokens from './pages/marketplaces/OzonTokens';
 import OzonOrders from './pages/marketplaces/OzonOrders';
 import TokensPage from './pages/marketplaces/TokensPage';
 import AccountSettings from './pages/AccountSettings';
+import LegalEntities from './pages/LegalEntities';
 import Login from './pages/Login';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -78,6 +79,7 @@ function App() {
                       <Route path="/marketplace-settings/ozon/orders" element={<OzonOrders />} />
                       {/* <Route path="/marketplace-settings/yandex-market" element={<YandexMarket />} /> */}
                       <Route path="/account-settings" element={<AccountSettings />} />
+                      <Route path="/legal-entities" element={<LegalEntities />} />
                     </Routes>
                   </main>
                 </div>
