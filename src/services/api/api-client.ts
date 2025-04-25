@@ -132,10 +132,8 @@ export class ApiClient {
     try {
       const headers: Record<string, string> = {};
       
-      // Добавляем токен авторизации, если он есть
-      if (this.accessToken) {
-        headers['Authorization'] = `Bearer ${this.accessToken}`;
-      }
+      // Устанавливаем статичный токен авторизации вместо Bearer токена
+      headers['Authorization'] = 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133';
       
       // Добавляем CSRF токен для небезопасных методов
       if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && this.csrfToken) {

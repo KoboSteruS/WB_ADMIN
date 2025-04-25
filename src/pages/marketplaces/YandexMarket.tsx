@@ -1,123 +1,94 @@
-import React, { useState } from 'react';
-import { Container, Row, Col, Card, Form, Button, Alert } from 'react-bootstrap';
+import React from 'react';
+import { Container, Row, Col, Card, Nav } from 'react-bootstrap';
+import { Link } from 'react-router-dom';
 
+/**
+ * Компонент главной страницы Яндекс Маркета
+ */
 const YandexMarket: React.FC = () => {
-  const [token, setToken] = useState('');
-  const [validated, setValidated] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
-
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    const form = event.currentTarget;
-    event.preventDefault();
-    
-    if (form.checkValidity() === false) {
-      event.stopPropagation();
-    } else {
-      // Здесь будет логика сохранения настроек API
-      console.log('Сохранение настроек Яндекс.Маркет:', { token });
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
-    }
-
-    setValidated(true);
-  };
-
   return (
-    <Container fluid>
+    <Container fluid className="py-4">
       <Row className="mb-4">
         <Col>
-          <h1 className="page-title">Настройки Яндекс.Маркет</h1>
-          <p className="text-muted">Управление интеграцией с маркетплейсом Яндекс.Маркет</p>
+          <h1 className="page-title">Яндекс Маркет</h1>
+          <p className="text-muted">Интеграция с Яндекс Маркетом</p>
         </Col>
       </Row>
 
-      {showSuccess && (
-        <Row className="mb-4">
-          <Col>
-            <Alert variant="success" onClose={() => setShowSuccess(false)} dismissible>
-              Настройки успешно сохранены
-            </Alert>
-          </Col>
-        </Row>
-      )}
-
       <Row>
-        <Col lg={8}>
-          <Card className="mb-4">
-            <Card.Header>
-              <h5 className="mb-0">API Яндекс.Маркет</h5>
-            </Card.Header>
-            <Card.Body>
-              <Form noValidate validated={validated} onSubmit={handleSubmit}>
-                <Form.Group className="mb-3">
-                  <Form.Label>OAuth Token</Form.Label>
-                  <Form.Control
-                    required
-                    type="password"
-                    value={token}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setToken(e.target.value)}
-                    placeholder="Введите OAuth Token"
-                  />
-                  <div className="invalid-feedback">
-                    Пожалуйста, введите OAuth Token.
-                  </div>
-                  <Form.Text className="text-muted">
-                    OAuth Token можно получить в Developer кабинете Яндекса.
-                  </Form.Text>
-                </Form.Group>
-
-                <div className="d-flex justify-content-between">
-                  <Button variant="primary" type="submit">
-                    Сохранить настройки
-                  </Button>
-                  <Button variant="outline-secondary">
-                    Проверить соединение
-                  </Button>
-                </div>
-              </Form>
-            </Card.Body>
-          </Card>
-
+        <Col>
           <Card>
             <Card.Header>
-              <h5 className="mb-0">Документация</h5>
+              <h2 className="card-title mb-0">Функциональность Яндекс Маркета</h2>
             </Card.Header>
             <Card.Body>
-              <h6>Как получить доступ к API Яндекс.Маркет?</h6>
-              <ol>
-                <li>Зарегистрируйте приложение в <a href="https://oauth.yandex.ru/" target="_blank" rel="noopener noreferrer">Яндекс OAuth</a></li>
-                <li>Получите OAuth-токен с нужными правами</li>
-                <li>Введите полученный токен в соответствующее поле</li>
-              </ol>
-              <p>Подробнее об API Яндекс.Маркет вы можете прочитать в <a href="https://yandex.ru/dev/market/partner/doc/dg/concepts/about.html" target="_blank" rel="noopener noreferrer">официальной документации</a>.</p>
-            </Card.Body>
-          </Card>
-        </Col>
+              <p>
+                Используйте эту интеграцию для работы с Яндекс Маркетом. Управляйте токенами,
+                получайте информацию о заказах, товарах и аналитику по продажам.
+              </p>
 
-        <Col lg={4}>
-          <Card className="mb-4">
-            <Card.Header>
-              <h5 className="mb-0">Статус подключения</h5>
-            </Card.Header>
-            <Card.Body className="text-center">
-              <i className="bi bi-x-circle-fill text-danger fs-1 mb-3"></i>
-              <h6>Нет подключения</h6>
-              <p className="text-muted">Токен не настроен или не валиден.</p>
-            </Card.Body>
-          </Card>
+              <h3 className="mt-4 mb-3">Доступные возможности</h3>
+              <Row>
+                <Col md={6} lg={3} className="mb-4">
+                  <Card className="h-100">
+                    <Card.Body className="text-center">
+                      <i className="bi bi-key fs-1 mb-3 text-primary"></i>
+                      <h5>Управление токенами</h5>
+                      <p className="text-muted">
+                        Добавление и настройка токенов для интеграции с API Яндекс Маркета
+                      </p>
+                      <Link to="/marketplace-settings/yandex-market" className="btn btn-primary mt-2">
+                        Перейти к настройкам
+                      </Link>
+                    </Card.Body>
+                  </Card>
+                </Col>
 
-          <Card>
-            <Card.Header>
-              <h5 className="mb-0">Возможности интеграции</h5>
-            </Card.Header>
-            <Card.Body>
-              <ul className="list-unstyled">
-                <li className="mb-2"><i className="bi bi-check-circle-fill text-success me-2"></i> Управление товарами</li>
-                <li className="mb-2"><i className="bi bi-check-circle-fill text-success me-2"></i> Обработка заказов</li>
-                <li className="mb-2"><i className="bi bi-check-circle-fill text-success me-2"></i> Контроль остатков</li>
-                <li className="mb-2"><i className="bi bi-check-circle-fill text-success me-2"></i> Аналитика продаж</li>
-                <li className="mb-2"><i className="bi bi-check-circle-fill text-success me-2"></i> Управление скидками</li>
-              </ul>
+                <Col md={6} lg={3} className="mb-4">
+                  <Card className="h-100">
+                    <Card.Body className="text-center">
+                      <i className="bi bi-box-seam fs-1 mb-3 text-secondary"></i>
+                      <h5>Управление заказами</h5>
+                      <p className="text-muted">
+                        Просмотр, управление и аналитика заказов из Яндекс Маркета
+                      </p>
+                      <button className="btn btn-secondary mt-2" disabled>
+                        В разработке
+                      </button>
+                    </Card.Body>
+                  </Card>
+                </Col>
+
+                <Col md={6} lg={3} className="mb-4">
+                  <Card className="h-100">
+                    <Card.Body className="text-center">
+                      <i className="bi bi-cart3 fs-1 mb-3 text-secondary"></i>
+                      <h5>Управление товарами</h5>
+                      <p className="text-muted">
+                        Управление каталогом товаров на Яндекс Маркете
+                      </p>
+                      <button className="btn btn-secondary mt-2" disabled>
+                        В разработке
+                      </button>
+                    </Card.Body>
+                  </Card>
+                </Col>
+
+                <Col md={6} lg={3} className="mb-4">
+                  <Card className="h-100">
+                    <Card.Body className="text-center">
+                      <i className="bi bi-graph-up fs-1 mb-3 text-secondary"></i>
+                      <h5>Аналитика продаж</h5>
+                      <p className="text-muted">
+                        Статистика и аналитика продаж на Яндекс Маркете
+                      </p>
+                      <button className="btn btn-secondary mt-2" disabled>
+                        В разработке
+                      </button>
+                    </Card.Body>
+                  </Card>
+                </Col>
+              </Row>
             </Card.Body>
           </Card>
         </Col>

@@ -67,11 +67,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
                 <span className="sidebar-text">Ozon</span>
               </Link>
             </li>
-            <li className="submenu-item disabled">
-              <span className="submenu-link text-muted d-flex align-items-center">
+            <li className={`submenu-item ${isActive('/marketplace-settings/yandex-market') ? 'active' : ''}`}>
+              <Link to="/marketplace-settings/yandex-market" className="submenu-link">
                 <span className="sidebar-text">YandexMarket</span>
-                <span className="badge bg-secondary ms-2 small">Скоро</span>
-              </span>
+              </Link>
             </li>
           </ul>
         </li>

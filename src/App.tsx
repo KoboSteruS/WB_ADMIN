@@ -9,6 +9,7 @@ import MarketplaceSettings from './pages/MarketplaceSettings';
 import Wildberries from './pages/marketplaces/Wildberries';
 import Ozon from './pages/marketplaces/Ozon';
 import YandexMarket from './pages/marketplaces/YandexMarket';
+import YandexMarketSettings from './pages/marketplaces/YandexMarketSettings';
 import WildberriesTokens from './pages/marketplaces/WildberriesTokens';
 import WildberriesOrders from './pages/marketplaces/WildberriesOrders';
 import OzonTokens from './pages/marketplaces/OzonTokens';
@@ -77,7 +78,7 @@ function App() {
                       <Route path="/marketplace-settings/ozon" element={<Ozon />} />
                       <Route path="/marketplace-settings/ozon/tokens" element={<OzonTokens />} />
                       <Route path="/marketplace-settings/ozon/orders" element={<OzonOrders />} />
-                      {/* <Route path="/marketplace-settings/yandex-market" element={<YandexMarket />} /> */}
+                      <Route path="/marketplace-settings/yandex-market" element={<YandexMarketSettings />} />
                       <Route path="/account-settings" element={<AccountSettings />} />
                       <Route path="/legal-entities" element={<LegalEntities />} />
                     </Routes>

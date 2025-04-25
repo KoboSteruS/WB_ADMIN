@@ -419,6 +419,65 @@ export class ApiService {
       return apiClient.post<{ success: boolean; message: string }>(`/ozon-tokens/${id}/test/`);
     }
   };
+
+  /**
+   * Сервис для работы с токенами Яндекс Маркета
+   */
+  public yandexMarketTokens = {
+    /**
+     * Получение всех токенов Яндекс Маркета
+     */
+    getAll: (): Promise<any[]> => {
+      return apiClient.get<any[]>('/yandex-market-tokens/');
+    },
+
+    /**
+     * Получение токена по ID
+     * @param id - ID токена
+     */
+    getById: (id: number): Promise<any> => {
+      return apiClient.get<any>(`/yandex-market-tokens/${id}/`);
+    },
+
+    /**
+     * Создание нового токена Яндекс Маркета
+     * @param campaignId - ID кампании Яндекс Маркета
+     * @param apiKey - API ключ Яндекс Маркета
+     * @param accountIp - ID аккаунта/юр. лица
+     */
+    create: (campaignId: number, apiKey: string, accountIp: number): Promise<any> => {
+      return apiClient.post<any>('/yandex-market-tokens/', { 
+        campaign_id: campaignId, 
+        api_key: apiKey, 
+        account_ip: accountIp 
+      });
+    },
+
+    /**
+     * Обновление токена Яндекс Маркета
+     * @param id - ID токена
+     * @param data - Данные для обновления
+     */
+    update: (id: number, data: Partial<any>): Promise<any> => {
+      return apiClient.put<any>(`/yandex-market-tokens/${id}/`, data);
+    },
+
+    /**
+     * Удаление токена Яндекс Маркета
+     * @param id - ID токена
+     */
+    delete: (id: number): Promise<void> => {
+      return apiClient.delete<void>(`/yandex-market-tokens/${id}/`);
+    },
+
+    /**
+     * Проверка работоспособности токена Яндекс Маркета
+     * @param id - ID токена для проверки
+     */
+    testConnection: (id: number): Promise<{ success: boolean; message: string }> => {
+      return apiClient.post<{ success: boolean; message: string }>(`/yandex-market-tokens/${id}/test/`);
+    }
+  };
 }
 
 export const apiService = new ApiService();

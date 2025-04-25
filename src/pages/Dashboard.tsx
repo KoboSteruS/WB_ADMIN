@@ -86,14 +86,6 @@ const Dashboard: React.FC = () => {
         </Col>
       </Row>
 
-      <Row className="mb-4">
-        <Col>
-          <Alert variant="info" className="mb-0">
-            <i className="bi bi-info-circle me-2"></i>
-            Добро пожаловать в панель управления! Воспользуйтесь меню слева для навигации.
-          </Alert>
-        </Col>
-      </Row>
 
       <Row className="mb-4">
         <Col>

@@ -38,13 +38,13 @@ const MarketplaceSettings: React.FC = () => {
               </div>
             </Nav.Link>
             <Nav.Link 
-              className="disabled text-muted"
-              onClick={(e: React.MouseEvent<HTMLElement>) => e.preventDefault()}
+              as={Link}
+              to="/marketplace-settings/yandex-market"
+              active={location.pathname === '/marketplace-settings/yandex-market'}
             >
               <div className="d-flex align-items-center">
-                <div className="marketplace-icon yandex-icon me-2 opacity-50">YM</div>
-                <span>Yandex Market</span>
-                <span className="badge bg-secondary ms-2">Скоро</span>
+                <div className="marketplace-icon yandex-icon me-2">YM</div>
+                <span>Яндекс Маркет</span>
               </div>
             </Nav.Link>
           </Nav>

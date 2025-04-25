@@ -276,6 +276,81 @@ export const notificationService = {
   }
 };
 
+/**
+ * Сервис для работы с Яндекс Маркетом
+ */
+export const yandexMarketService = {
+  /**
+   * Получение всех токенов Яндекс Маркета
+   */
+  getTokens: (): Promise<any[]> => {
+    return apiClient.get<any[]>('/yandex-market-tokens/');
+  },
+
+  /**
+   * Получение токена по ID
+   */
+  getTokenById: (id: number): Promise<any> => {
+    return apiClient.get<any>(`/yandex-market-tokens/${id}/`);
+  },
+
+  /**
+   * Создание нового токена
+   */
+  createToken: (campaignId: number, apiKey: string, accountIp: number): Promise<any> => {
+    return apiClient.post<any>('/yandex-market-tokens/', { 
+      campaign_id: campaignId, 
+      api_key: apiKey, 
+      account_ip: accountIp 
+    });
+  },
+
+  /**
+   * Обновление токена
+   */
+  updateToken: (id: number, data: any): Promise<any> => {
+    return apiClient.put<any>(`/yandex-market-tokens/${id}/`, data);
+  },
+
+  /**
+   * Удаление токена
+   */
+  deleteToken: (id: number): Promise<void> => {
+    return apiClient.delete<void>(`/yandex-market-tokens/${id}/`);
+  },
+
+  /**
+   * Получение заказов
+   */
+  getOrders: (tokenId: number, params = {}): Promise<any> => {
+    return apiClient.get<any>('/yandex-market/orders', { 
+      token_id: tokenId,
+      ...params 
+    });
+  },
+
+  /**
+   * Получение товаров
+   */
+  getProducts: (tokenId: number, params = {}): Promise<any> => {
+    return apiClient.get<any>('/yandex-market/products', { 
+      token_id: tokenId,
+      ...params 
+    });
+  },
+
+  /**
+   * Получение статистики продаж
+   */
+  getSalesStats: (tokenId: number, dateFrom: string, dateTo: string): Promise<any> => {
+    return apiClient.get<any>('/yandex-market/stats/sales', { 
+      token_id: tokenId,
+      date_from: dateFrom,
+      date_to: dateTo
+    });
+  }
+};
+
 export default {
   auth: authService,
   marketplace: marketplaceService,
@@ -283,5 +358,6 @@ export default {
   finance: financeService,
   analytics: analyticsService,
   productGroup: productGroupService,
-  notification: notificationService
+  notification: notificationService,
+  yandexMarket: yandexMarketService
 }; 
