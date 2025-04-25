@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Container, Row, Col, Alert, Table, Button, Form } from 'react-bootstrap';
 import Spinner from 'react-bootstrap/Spinner';
 import Modal from 'react-bootstrap/Modal';
+import ButtonGroup from 'react-bootstrap/ButtonGroup';
+import { useNavigate } from 'react-router-dom';
 import './Dashboard.css';
 
 interface LegalEntity {
@@ -11,6 +13,7 @@ interface LegalEntity {
 }
 
 const Dashboard: React.FC = () => {
+  const navigate = useNavigate();
   const [legalEntities, setLegalEntities] = useState<LegalEntity[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -170,6 +173,19 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  /**
+   * Переход на страницу заказов WB для выбранного юр. лица
+   * @param entity - юридическое лицо
+   */
+  const handleViewWbOrders = (entity: LegalEntity) => {
+    // Сохраняем ID и данные юр. лица в localStorage для использования на странице заказов
+    localStorage.setItem('selectedLegalEntityId', entity.id);
+    localStorage.setItem('selectedLegalEntityData', JSON.stringify(entity));
+    
+    // Переходим на страницу заказов WB
+    navigate('/marketplace-settings/wildberries/orders');
+  };
+
   return (
     <Container fluid className="dashboard-container">
       <Row className="mb-4">
@@ -179,14 +195,6 @@ const Dashboard: React.FC = () => {
         </Col>
       </Row>
 
-      <Row className="mb-4">
-        <Col>
-          <Alert variant="info" className="mb-0">
-            <i className="bi bi-info-circle me-2"></i>
-            У вас нет добавленных аккаунтов. Вы видите демо данные.
-          </Alert>
-        </Col>
-      </Row>
 
       <Row className="mb-4">
         <Col>
@@ -230,15 +238,24 @@ const Dashboard: React.FC = () => {
                     <td>{entity.id}</td>
                     <td>{entity.title}</td>
                     <td>{entity.inn}</td>
-                    <td className="text-center">
-                      <Button 
-                        variant="danger" 
-                        size="sm" 
-                        onClick={() => handleShowDeleteConfirm(entity)}
-                      >
-                        <i className="bi bi-trash me-1"></i>
-                        Удалить
-                      </Button>
+                    <td>
+                      <ButtonGroup size="sm">
+                        <Button 
+                          variant="primary" 
+                          onClick={() => handleViewWbOrders(entity)}
+                          className="me-2"
+                        >
+                          <i className="bi bi-box me-1"></i>
+                          Заказы WB
+                        </Button>
+                        <Button 
+                          variant="danger" 
+                          onClick={() => handleShowDeleteConfirm(entity)}
+                        >
+                          <i className="bi bi-trash me-1"></i>
+                          Удалить
+                        </Button>
+                      </ButtonGroup>
                     </td>
                   </tr>
                 ))}

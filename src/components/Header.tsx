@@ -119,10 +119,6 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
                 <span className="account-name d-none d-md-inline">{user ? user.name || user.email : 'Пользователь'}</span>
               </Dropdown.Toggle>
               <Dropdown.Menu align="end" className="account-menu">
-                <Dropdown.Item as={Link} to="/account-settings">
-                  <i className="bi bi-gear me-2"></i>
-                  Настройки аккаунта
-                </Dropdown.Item>
                 <Dropdown.Divider />
                 <Dropdown.Item onClick={handleLogout}>
                   <i className="bi bi-box-arrow-right me-2"></i>

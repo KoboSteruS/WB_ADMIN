@@ -18,17 +18,17 @@ import { useNavigate } from 'react-router-dom';
  */
 interface WbOrder {
   id?: number;
-  address?: string | null;
+  address?: string[] | string | null;
   ddate?: string | null;
   sale_price?: string | number;
   required_meta?: any[];
-  delivery_type?: string;
+  delivery_type?: string | number;
   comment?: string;
   scan_price?: string | number | null;
   order_uid?: string;
-  article?: string;
-  color_code?: string;
-  rid?: string;
+  article?: string | number;
+  color_code?: string | number;
+  rid?: string | number;
   created_at?: string;
   offices?: string[];
   skus?: string[];
@@ -43,11 +43,22 @@ interface WbOrder {
   cargo_type?: number;
   is_zero_order?: boolean;
   options?: {
-    isB2B?: boolean;
     [key: string]: any;
   };
+  wb_status?: string;
+  own_status?: string;
+  sticker?: string;
   wb_token?: number;
   [key: string]: any;
+}
+
+/**
+ * Интерфейс для данных юридического лица
+ */
+interface LegalEntity {
+  id: string;
+  title: string;
+  inn: string;
 }
 
 interface WildberriesOrdersProps {
@@ -68,6 +79,9 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
   const [showTestData, setShowTestData] = useState<boolean>(false);
   const [rawResponse, setRawResponse] = useState<string>('');
   const [showRawResponse, setShowRawResponse] = useState<boolean>(false);
+  
+  // Данные о выбранном юридическом лице
+  const [selectedLegalEntity, setSelectedLegalEntity] = useState<LegalEntity | null>(null);
   
   // Состояния для модального окна добавления токена
   const [showAddTokenModal, setShowAddTokenModal] = useState<boolean>(false);
@@ -139,6 +153,22 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
     }
   ];
 
+  // Загрузка данных о юр. лице из localStorage при монтировании компонента
+  useEffect(() => {
+    // Получаем ID и данные юр. лица из localStorage
+    const legalEntityIdFromStorage = localStorage.getItem('selectedLegalEntityId');
+    const legalEntityDataFromStorage = localStorage.getItem('selectedLegalEntityData');
+    
+    if (legalEntityDataFromStorage) {
+      try {
+        const parsedData = JSON.parse(legalEntityDataFromStorage);
+        setSelectedLegalEntity(parsedData);
+      } catch (e) {
+        console.error('Ошибка при парсинге данных юр. лица:', e);
+      }
+    }
+  }, []);
+
   // Загрузка заказов при монтировании компонента
   useEffect(() => {
     if (!showTestData) {
@@ -147,7 +177,7 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
       setLoading(false);
       setError(null);
     }
-  }, [showTestData]);
+  }, [showTestData, selectedLegalEntity]);
 
   // Убеждаемся, что Modal компонент корректно работает
   useEffect(() => {
@@ -159,16 +189,32 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
     setLoading(true);
     setError(null);
     setRawResponse('');
+    
+    // Если нет выбранного юр. лица и не показываем тестовые данные, выводим предупреждение
+    if (!selectedLegalEntity && !showTestData) {
+      setError('Не выбрано юридическое лицо');
+      setLoading(false);
+      return;
+    }
+    
     console.log('Отправка запроса на получение заказов...');
+    console.log('Юридическое лицо:', selectedLegalEntity?.title);
     
     try {
-      const apiUrl = 'http://62.113.44.196:8080/api/v1/wb-orders/';
+      let apiUrl = 'http://62.113.44.196:8080/api/v1/wb-orders/';
+      
+      // Если выбрано юр. лицо, добавляем его ID в параметры запроса
+      if (selectedLegalEntity) {
+        apiUrl += `?account_ip=${selectedLegalEntity.id}`;
+      }
+      
       console.log('URL запроса:', apiUrl);
       
       const response = await fetch(apiUrl, {
         method: 'GET',
         headers: {
-          'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133'
+          'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133',
+          'Content-Type': 'application/json'
         }
       });
     
@@ -184,7 +230,6 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
       // Получаем сырой текст ответа
       const responseText = await response.text();
       setRawResponse(responseText);
-      console.log('Сырой ответ:', responseText);
       
       if (!response.ok) {
         throw new Error(`Ошибка HTTP: ${response.status} ${response.statusText}`);
@@ -198,54 +243,38 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
       } catch (err) {
         console.error('Ошибка парсинга JSON:', err);
         setError('Ошибка парсинга ответа сервера. Сервер вернул некорректный JSON.');
-        setOrders([]);
         setLoading(false);
         return;
       }
-    
-      if (Array.isArray(data)) {
-        console.log('Успешно получено заказов:', data.length);
-        if (data.length > 0) {
-          console.log('Пример заказа:', data[0]);
-          console.log('Доступные поля:', Object.keys(data[0]).join(', '));
-        }
+      
+      // Проверяем наличие поля orders в ответе
+      const orders = data.orders || data;
+      
+      if (Array.isArray(orders)) {
+        console.log('Успешно получено заказов:', orders.length);
         
-        setOrders(data);
-      } else {
-        console.log('Ответ сервера не является массивом:', data);
-        // Проверим другие возможные структуры данных
-        if (data && typeof data === 'object') {
-          if (Array.isArray(data.results)) {
-            console.log('Получены данные в поле results');
-            setOrders(data.results);
-          } else if (Array.isArray(data.data)) {
-            console.log('Получены данные в поле data');
-            setOrders(data.data);
-          } else if (Array.isArray(data.orders)) {
-            console.log('Получены данные в поле orders');
-            setOrders(data.orders);
-          } else if (Array.isArray(data.items)) {
-            console.log('Получены данные в поле items');
-            setOrders(data.items);
-          } else {
-            console.log('Структура данных не определена');
-            setError('В ответе сервера не найдены заказы. Проверьте формат ответа в консоли.');
-            setOrders([]);
+        // Подробный вывод заказов в консоль
+        orders.forEach((order, index) => {
+          console.log(`\n📦 Заказ №${index + 1}`);
+          console.log('-------------------------');
+          
+          for (const [key, value] of Object.entries(order)) {
+            console.log(`${key}:`, value);
           }
-        } else {
-          setError('Неверный формат данных от сервера');
-          setOrders([]);
-        }
-      }
-    } catch (error) {
-      if (error instanceof Error) {
-        console.error('Ошибка при запросе:', error.message);
-        setError(error.message);
+        });
+        
+        setOrders(orders);
       } else {
-        console.error('Произошла неизвестная ошибка при загрузке заказов');
+        console.log('Поле orders не является массивом:', orders);
+        setError('Неверный формат данных от сервера. Массив заказов не найден.');
+      }
+    } catch (err) {
+      console.error('❌ Ошибка при запросе:', err);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
         setError('Произошла неизвестная ошибка при загрузке заказов');
       }
-      setOrders([]);
     } finally {
       setLoading(false);
     }
@@ -283,38 +312,86 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
     }).format(numPrice);
   };
 
-  // Получение статуса заказа с соответствующим стилем
-  const getStatusBadge = (status?: string) => {
-    if (!status) return <Badge bg="secondary">Нет статуса</Badge>;
-    
-    let variant = 'secondary';
-    
-    try {
-      switch(status.toLowerCase()) {
+  /**
+   * Получение бейджа статуса заказа
+   */
+  const getStatusBadge = (order: WbOrder) => {
+    // Если есть поля с новыми статусами - используем их
+    if (order.wb_status || order.own_status) {
+      const wbStatus = order.wb_status || 'unknown';
+      const ownStatus = order.own_status || 'unknown';
+      
+      // Определяем цвет бейджа на основе статуса заказа
+      let bgColor = 'secondary';
+      let statusText = wbStatus;
+      
+      switch (wbStatus.toLowerCase()) {
         case 'new':
-        case 'created':
-          variant = 'info';
+          bgColor = 'primary';
+          statusText = 'Новый';
           break;
         case 'confirmed':
-        case 'in_progress':
-          variant = 'primary';
+          bgColor = 'info';
+          statusText = 'Подтвержден';
+          break;
+        case 'assembled':
+          bgColor = 'warning';
+          statusText = 'Собран';
+          break;
+        case 'sent':
+          bgColor = 'success';
+          statusText = 'Отправлен';
           break;
         case 'delivered':
-        case 'completed':
-          variant = 'success';
+          bgColor = 'dark';
+          statusText = 'Доставлен';
           break;
-        case 'cancelled':
         case 'canceled':
-          variant = 'danger';
+          bgColor = 'danger';
+          statusText = 'Отменен';
           break;
         default:
-          variant = 'secondary';
+          bgColor = 'secondary';
+          statusText = wbStatus;
       }
-    } catch (e) {
-      console.error('Ошибка при обработке статуса:', e);
+      
+      // Если внутренний статус отличается от статуса WB
+      if (ownStatus.toLowerCase() !== wbStatus.toLowerCase()) {
+        return (
+          <div className="d-flex flex-column gap-1">
+            <Badge bg={bgColor}>WB: {statusText}</Badge>
+            <Badge bg="info">Свой: {ownStatus}</Badge>
+          </div>
+        );
+      }
+      
+      return <Badge bg={bgColor}>{statusText}</Badge>;
     }
     
-    return <Badge bg={variant}>{status}</Badge>;
+    // Старая логика для обратной совместимости
+    const status = order.status?.toString() || 'new';
+    
+    switch (status.toLowerCase()) {
+      case 'new':
+      case 'awaiting_confirmation':
+        return <Badge bg="primary">Новый</Badge>;
+      case 'confirmed':
+      case 'awaiting_packaging':
+        return <Badge bg="info">Подтвержден</Badge>;
+      case 'ready_to_ship':
+      case 'awaiting_deliver':
+        return <Badge bg="warning">Готов к отправке</Badge>;
+      case 'shipped':
+      case 'delivering':
+        return <Badge bg="success">Отправлен</Badge>;
+      case 'delivered':
+        return <Badge bg="dark">Доставлен</Badge>;
+      case 'canceled':
+      case 'cancelled':
+        return <Badge bg="danger">Отменен</Badge>;
+      default:
+        return <Badge bg="secondary">{status}</Badge>;
+    }
   };
 
   // Обработчик выбора одного заказа
@@ -353,7 +430,7 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
     setShowRawResponse(!showRawResponse);
   };
 
-  // Данные для отображения
+  // Определяем, какие данные отображать - тестовые или из API
   const displayOrders = showTestData ? testOrders : orders;
 
   // Обработчик отправки формы добавления токена
@@ -459,7 +536,14 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
       <Row className="mb-4">
         <Col>
           <div className="d-flex justify-content-between align-items-center mb-4">
-            <h1 className="h3 mb-0">Заказы Wildberries</h1>
+            <div>
+              <h1 className="h3 mb-0">Заказы Wildberries</h1>
+              {selectedLegalEntity && (
+                <p className="text-muted mb-0">
+                  Юридическое лицо: <strong>{selectedLegalEntity.title}</strong> (ИНН: {selectedLegalEntity.inn})
+                </p>
+              )}
+            </div>
             <div>
               <Button 
                 variant="primary"
@@ -485,9 +569,9 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
               </Button>
               <Button 
                 variant="outline-secondary" 
-                onClick={() => navigate('/marketplace-settings/wildberries')}
+                onClick={() => navigate(-1)}
               >
-                Назад к токенам
+                Назад
               </Button>
             </div>
           </div>
@@ -568,11 +652,13 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
                         <th>Order UID</th>
                         <th>Артикул</th>
                         <th>NM ID</th>
+                        <th>Статус</th>
                         <th>Штрихкоды</th>
                         <th>Цена продажи</th>
                         <th>Цена закупки</th>
                         <th>Офисы</th>
                         <th>Тип доставки</th>
+                        <th>Стикер</th>
                         <th>Warehouse ID</th>
                         <th>Cargo Type</th>
                         <th>RID</th>
@@ -598,6 +684,7 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
                           <td>{order.order_uid || '—'}</td>
                           <td>{order.article || '—'}</td>
                           <td>{order.nm_id || '—'}</td>
+                          <td>{getStatusBadge(order)}</td>
                           <td>
                             {order.skus && order.skus.length > 0 
                               ? order.skus.join(', ') 
@@ -612,9 +699,10 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
                           </td>
                           <td>
                             {order.delivery_type 
-                              ? <Badge bg="primary">{order.delivery_type.toUpperCase()}</Badge>
+                              ? <Badge bg="primary">{typeof order.delivery_type === 'string' ? order.delivery_type.toUpperCase() : order.delivery_type}</Badge>
                               : '—'}
                           </td>
+                          <td>{order.sticker || '—'}</td>
                           <td>{order.warehouse_id || '—'}</td>
                           <td>{order.cargo_type || '—'}</td>
                           <td>{order.rid || '—'}</td>
@@ -704,18 +792,6 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
                     handleAddToken(e);
                   }}
                 >
-                  <Form.Group className="mb-3">
-                    <Form.Label>Название токена</Form.Label>
-                    <Form.Control
-                      type="text"
-                      placeholder="Например: Основной токен"
-                      value={newTokenName}
-                      onChange={(e) => setNewTokenName(e.target.value)}
-                    />
-                    <Form.Text className="text-muted">
-                      Не обязательное поле. Помогает идентифицировать токен.
-                    </Form.Text>
-                  </Form.Group>
                   
                   <Form.Group className="mb-3">
                     <Form.Label>API-токен Wildberries</Form.Label>

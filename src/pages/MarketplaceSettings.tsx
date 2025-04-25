@@ -28,13 +28,13 @@ const MarketplaceSettings: React.FC = () => {
               </div>
             </Nav.Link>
             <Nav.Link 
-              className="disabled text-muted"
-              onClick={(e: React.MouseEvent<HTMLElement>) => e.preventDefault()}
+              as={Link} 
+              to="/marketplace-settings/ozon"
+              active={location.pathname === '/marketplace-settings/ozon'}
             >
               <div className="d-flex align-items-center">
-                <div className="marketplace-icon ozon-icon me-2 opacity-50">OZ</div>
+                <div className="marketplace-icon ozon-icon me-2">OZ</div>
                 <span>Ozon</span>
-                <span className="badge bg-secondary ms-2">Скоро</span>
               </div>
             </Nav.Link>
             <Nav.Link 

@@ -3,9 +3,17 @@ import { AxiosResponse } from 'axios';
 import { 
   OzonToken, 
   OzonTokenCreateRequest, 
-  OzonTokenUpdateRequest, 
-  OzonTokenTestResponse 
-} from '../../types/ozon';
+  OzonTokenUpdateRequest 
+} from './types';
+
+/**
+ * Интерфейс ответа на проверку токена Ozon
+ */
+export interface OzonTokenTestResponse {
+  status: string;
+  message: string;
+  is_valid: boolean;
+}
 
 /**
  * Сервис для работы с API Ozon

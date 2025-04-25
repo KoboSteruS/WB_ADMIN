@@ -640,12 +640,6 @@ const Wildberries: React.FC = () => {
         <Col>
           <div className="d-flex justify-content-between align-items-center mb-4">
             <h1 className="h3 mb-0">Токены Wildberries</h1>
-            <Button 
-              variant="primary" 
-              onClick={handleViewAllOrders}
-            >
-              <i className="bi bi-list-ul me-1"></i> Все заказы
-            </Button>
           </div>
           
           {error && (
@@ -919,19 +913,6 @@ const Wildberries: React.FC = () => {
               </Form.Text>
             </Form.Group>
             
-            <Form.Group className="mb-3">
-              <Form.Label className="text-light">Название токена</Form.Label>
-              <Form.Control
-                type="text"
-                placeholder="Например: Основной токен"
-                value={newTokenName}
-                onChange={(e) => setNewTokenName(e.target.value)}
-                className="bg-dark text-light border-secondary"
-              />
-              <Form.Text className="text-muted">
-                Не обязательное поле. Помогает идентифицировать токен.
-              </Form.Text>
-            </Form.Group>
             
             <Form.Group className="mb-3">
               <Form.Label className="text-light">API-токен Wildberries</Form.Label>

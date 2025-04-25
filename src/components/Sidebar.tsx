@@ -54,11 +54,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
                 <span className="sidebar-text">Wildberries</span>
               </Link>
             </li>
-            <li className="submenu-item disabled">
-              <span className="submenu-link text-muted d-flex align-items-center">
+            <li className={`submenu-item ${isActive('/marketplace-settings/ozon') ? 'active' : ''}`}>
+              <Link to="/marketplace-settings/ozon" className="submenu-link">
                 <span className="sidebar-text">Ozon</span>
-                <span className="badge bg-secondary ms-2 small">Скоро</span>
-              </span>
+              </Link>
             </li>
             <li className="submenu-item disabled">
               <span className="submenu-link text-muted d-flex align-items-center">
@@ -69,12 +68,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
           </ul>
         </li>
         
-        <li className={`sidebar-item ${isActive('/account-settings') ? 'active' : ''}`}>
-          <Link to="/account-settings" className="sidebar-link">
-            <i className="bi bi-person me-3"></i>
-            <span className="sidebar-text">Настройки аккаунта</span>
-          </Link>
-        </li>
       </ul>
       
       <div className="sidebar-footer">

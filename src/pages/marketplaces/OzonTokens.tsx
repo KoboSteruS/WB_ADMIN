@@ -14,6 +14,54 @@ import apiService from '../../services/api';
 import Breadcrumb from '../../components/Breadcrumb';
 import AlertLink from '../../components/AlertLink';
 
+// Добавляем функцию для получения токенов Озон с внешнего API
+const fetchOzonTokensFromExternalAPI = async () => {
+  try {
+    const response = await fetch('http://62.113.44.196:8080/api/v1/ozon-tokens/', {
+      method: 'GET',
+      headers: {
+        'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Ошибка HTTP: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    // Выводим полученные данные в консоль
+    if (Array.isArray(data)) {
+      console.log('Успешно получено:', data);
+      data.forEach(order => {
+        console.log('---');
+        console.log('Всё:', order);
+        console.log('Всё:', order.id);
+        console.log('Всё:', order.client_id);
+        console.log('TOKEN:', order.api_key);
+        console.log('Всё:', order.created_at);
+        console.log('Всё:', order.account_ip);
+      });
+      
+      // Возвращаем данные для дальнейшей обработки
+      return data.map(item => ({
+        id: item.id,
+        name: `Токен ${item.client_id || 'без имени'}`,
+        token: item.api_key || '',
+        active: true,
+        lastChecked: item.created_at,
+        isValid: true
+      }));
+    } else {
+      console.log('Ответ сервера не является массивом:', data);
+      return [];
+    }
+  } catch (error) {
+    console.error('Ошибка при запросе токенов Озон:', error);
+    throw error;
+  }
+};
+
 // Ленивая загрузка модальных окон
 const AddTokenModal = lazy(() => import('../../components/modals/ozon/AddTokenModal'));
 const EditTokenModal = lazy(() => import('../../components/modals/ozon/EditTokenModal'));
@@ -29,8 +77,9 @@ interface Token {
 }
 
 interface TokenData {
-  name: string;
-  token: string;
+  client_id: string;
+  api_key: string;
+  account_ip: number;
 }
 
 interface TokenEditData {
@@ -66,7 +115,16 @@ const OzonTokens: React.FC = () => {
       setIsLoading(true);
       setError(null);
       
-      // Здесь должен быть запрос к API для получения токенов Ozon
+      // Пытаемся получить токены из внешнего API
+      try {
+        const externalTokens = await fetchOzonTokensFromExternalAPI();
+        setTokens(externalTokens || []);
+        return;
+      } catch (externalError) {
+        console.warn('Не удалось загрузить токены из внешнего API, используем встроенный API:', externalError);
+      }
+      
+      // Если внешний API недоступен, используем внутренний API
       const response = await apiService.marketplaceCredentials.getOzonTokens();
       setTokens(response.data || []);
     } catch (err) {
@@ -92,10 +150,31 @@ const OzonTokens: React.FC = () => {
    */
   const handleAddToken = async (tokenData: TokenData) => {
     try {
-      await apiService.marketplaceCredentials.createOzonToken(tokenData);
+      // Отправляем запрос напрямую вместо использования apiService
+      const response = await fetch('http://62.113.44.196:8080/api/v1/ozon-tokens/', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(tokenData)
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Ошибка при добавлении токена:', errorText);
+        throw new Error(`Ошибка при добавлении токена: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log('Токен успешно добавлен:', data);
+      
+      // Обновляем список токенов
       await loadTokens();
       return Promise.resolve();
     } catch (error) {
+      console.error('Ошибка:', error);
       return Promise.reject(error);
     }
   };

@@ -159,20 +159,6 @@ const AddTokenModal: React.FC<AddTokenModalProps> = ({ show, onHide, onSubmit })
             </Alert>
           )}
           
-          <Form.Group className="mb-3">
-            <Form.Label>Название токена</Form.Label>
-            <Form.Control
-              type="text"
-              placeholder="Например: Основной магазин"
-              value={name}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
-              disabled={isSubmitting}
-              maxLength={100}
-            />
-            <Form.Text className="text-muted">
-              Название для идентификации токена в системе (необязательно)
-            </Form.Text>
-          </Form.Group>
           
           <Form.Group className="mb-3">
             <Form.Label>API Token</Form.Label>

@@ -12,6 +12,7 @@ import YandexMarket from './pages/marketplaces/YandexMarket';
 import WildberriesTokens from './pages/marketplaces/WildberriesTokens';
 import WildberriesOrders from './pages/marketplaces/WildberriesOrders';
 import OzonTokens from './pages/marketplaces/OzonTokens';
+import OzonOrders from './pages/marketplaces/OzonOrders';
 import TokensPage from './pages/marketplaces/TokensPage';
 import AccountSettings from './pages/AccountSettings';
 import Login from './pages/Login';
@@ -72,9 +73,9 @@ function App() {
                       <Route path="/marketplace-settings/wildberries/tokens" element={<WildberriesTokens />} />
                       <Route path="/marketplace-settings/wildberries/orders" element={<WildberriesOrders />} />
                       <Route path="/test-orders" element={<WildberriesOrders />} />
-                      {/* Маршруты для Ozon и Yandex Market временно отключены */}
-                      {/* <Route path="/marketplace-settings/ozon" element={<Ozon />} /> */}
-                      {/* <Route path="/marketplace-settings/ozon/tokens" element={<OzonTokens />} /> */}
+                      <Route path="/marketplace-settings/ozon" element={<Ozon />} />
+                      <Route path="/marketplace-settings/ozon/tokens" element={<OzonTokens />} />
+                      <Route path="/marketplace-settings/ozon/orders" element={<OzonOrders />} />
                       {/* <Route path="/marketplace-settings/yandex-market" element={<YandexMarket />} /> */}
                       <Route path="/account-settings" element={<AccountSettings />} />
                     </Routes>
