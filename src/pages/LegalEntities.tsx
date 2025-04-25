@@ -286,14 +286,6 @@ const LegalEntities: React.FC = () => {
                     <td>
                       <ButtonGroup size="sm">
                         <Button 
-                          variant="primary" 
-                          onClick={() => handleViewWbOrders(entity)}
-                          className="me-2"
-                        >
-                          <i className="bi bi-box me-1"></i>
-                          Заказы WB
-                        </Button>
-                        <Button 
                           variant="danger" 
                           onClick={() => handleShowDeleteConfirm(entity)}
                         >
