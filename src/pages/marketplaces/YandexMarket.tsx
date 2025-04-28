@@ -52,9 +52,9 @@ const YandexMarket: React.FC = () => {
                       <p className="text-muted">
                         Просмотр, управление и аналитика заказов из Яндекс Маркета
                       </p>
-                      <button className="btn btn-secondary mt-2" disabled>
-                        В разработке
-                      </button>
+                      <Link to="/marketplace-settings/yandex-market/orders" className="btn btn-primary mt-2">
+                        Перейти к заказам
+                      </Link>
                     </Card.Body>
                   </Card>
                 </Col>

@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Container, Row, Col, Alert, Table, Button } from 'react-bootstrap';
 import Spinner from 'react-bootstrap/Spinner';
-import ButtonGroup from 'react-bootstrap/ButtonGroup';
 import { useNavigate } from 'react-router-dom';
 import './Dashboard.css';
 
@@ -71,6 +70,32 @@ const Dashboard: React.FC = () => {
   };
 
   /**
+   * Переход на страницу заказов Яндекс Маркета для выбранного юр. лица
+   * @param entity - юридическое лицо
+   */
+  const handleViewYandexMarketOrders = (entity: LegalEntity) => {
+    // Сохраняем ID и данные юр. лица в localStorage для использования на странице заказов
+    localStorage.setItem('selectedLegalEntityId', entity.id);
+    localStorage.setItem('selectedLegalEntityData', JSON.stringify(entity));
+    
+    // Переходим на страницу заказов Яндекс Маркета
+    navigate('/marketplace-settings/yandex-market/orders');
+  };
+
+  /**
+   * Переход на страницу заказов Ozon для выбранного юр. лица
+   * @param entity - юридическое лицо
+   */
+  const handleViewOzonOrders = (entity: LegalEntity) => {
+    // Сохраняем ID и данные юр. лица в localStorage для использования на странице заказов
+    localStorage.setItem('selectedLegalEntityId', entity.id);
+    localStorage.setItem('selectedLegalEntityData', JSON.stringify(entity));
+    
+    // Переходим на страницу заказов Ozon
+    navigate('/marketplace-settings/ozon/orders');
+  };
+
+  /**
    * Переход на страницу юридических лиц для их редактирования
    */
   const handleManageLegalEntities = () => {
@@ -130,14 +155,32 @@ const Dashboard: React.FC = () => {
                     <td>{entity.title}</td>
                     <td>{entity.inn}</td>
                     <td>
-                      <Button 
-                        variant="primary" 
-                        size="sm"
-                        onClick={() => handleViewWbOrders(entity)}
-                      >
-                        <i className="bi bi-box me-1"></i>
-                        Заказы WB
-                      </Button>
+                      <div className="btn-group">
+                        <Button 
+                          variant="primary" 
+                          size="sm"
+                          onClick={() => handleViewWbOrders(entity)}
+                        >
+                          <i className="bi bi-box me-1"></i>
+                          Заказы WB
+                        </Button>
+                        <Button 
+                          variant="info" 
+                          size="sm"
+                          onClick={() => handleViewYandexMarketOrders(entity)}
+                        >
+                          <i className="bi bi-box-seam me-1"></i>
+                          Заказы YM
+                        </Button>
+                        <Button 
+                          variant="warning" 
+                          size="sm"
+                          onClick={() => handleViewOzonOrders(entity)}
+                        >
+                          <i className="bi bi-box-arrow-right me-1"></i>
+                          Заказы OZ
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}

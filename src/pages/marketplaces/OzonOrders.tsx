@@ -15,94 +15,91 @@ import { useNavigate } from 'react-router-dom';
 import { serviceManager } from '../../services/service-manager';
 
 /**
- * Интерфейс для данных заказа Ozon
+ * Интерфейс для товара в заказе Ozon
  */
-interface OzonOrder {
-  id?: number;
-  order_id?: string | number;
-  order_number?: string;
-  posting_number?: string;
-  status?: string;
-  created_at?: string;
-  in_process_at?: string;
-  products?: OzonOrderProduct[];
-  analytics_data?: {
-    region?: string;
-    city?: string;
-    delivery_type?: string;
-    is_premium?: boolean;
-    payment_type_group_name?: string;
-    warehouse_id?: number;
-    warehouse_name?: string;
-    is_legal?: boolean;
-  };
-  financial_data?: {
-    posting_services?: {
-      marketplace_service_item_fulfillment?: number;
-      marketplace_service_item_pickup?: number;
-      marketplace_service_item_dropoff_pvz?: number;
-      marketplace_service_item_dropoff_sc?: number;
-      marketplace_service_item_dropoff_ff?: number;
-      marketplace_service_item_direct_flow_trans?: number;
-      marketplace_service_item_return_flow_trans?: number;
-      marketplace_service_item_deliv_to_customer?: number;
-      marketplace_service_item_return_not_deliv_to_customer?: number;
-      marketplace_service_item_return_part_deliv_to_customer?: number;
-      marketplace_service_item_return_after_deliv_to_customer?: number;
-    };
-    cluster_from?: string;
-    cluster_to?: string;
-  };
-  cancellation?: {
-    cancel_reason_id?: number;
-    cancel_reason?: string;
-    cancellation_type?: string;
-    cancelled_after_ship?: boolean;
-    affect_cancellation_rating?: boolean;
-    cancellation_initiator?: string;
-  };
-  customer?: {
-    address?: {
-      address_tail?: string;
-      city?: string;
-      comment?: string;
-      country?: string;
-      district?: string;
-      zip_code?: string;
-      latitude?: number;
-      longitude?: number;
-      provider_pvz_code?: string;
-      pvz_code?: string;
-      region?: string;
-    };
-    name?: string;
-    customer_email?: string;
-    customer_id?: number;
-    phone?: string;
-  };
-  delivery_method?: {
-    id?: number;
-    name?: string;
-    tpl_provider?: string;
-    tpl_provider_id?: number;
-    warehouse?: string;
-    warehouse_id?: number;
-  };
-  ozon_token_id?: number;
-  [key: string]: any;
+interface OzonOrderProduct {
+  price: number;
+  offer_id: string;
+  name: string;
+  sku: string;
+  quantity: number;
+  mandatory_mark: string | null;
+  currency_code: string;
+  is_blr_traceable: boolean;
 }
 
 /**
- * Интерфейс для товаров в заказе Ozon
+ * Интерфейс для метода доставки
  */
-interface OzonOrderProduct {
-  sku: number;
+interface DeliveryMethod {
+  id: string;
   name: string;
-  quantity: number;
-  offer_id: string;
-  price: string | number;
-  digital_codes?: string[];
-  currency_code?: string;
+  warehouse_id: string;
+  warehouse: string;
+  tpl_provider_id: string;
+  tpl_provider: string;
+}
+
+/**
+ * Интерфейс для данных заказа Ozon
+ */
+interface OzonOrder {
+  posting_number: string;
+  order_id: string;
+  order_number: string;
+  pickup_code_verified_at: string | null;
+  status: string;
+  delivery_method: DeliveryMethod;
+  tracking_number: string;
+  tpl_integration_type: string;
+  in_process_at: string;
+  shipment_date: string;
+  delivering_date: string;
+  optional: Record<string, any>;
+  cancellation: {
+    cancel_reason_id: number;
+    cancel_reason: string;
+    cancellation_type: string;
+    cancelled_after_ship: boolean;
+    affect_cancellation_rating: boolean;
+    cancellation_initiator: string;
+  };
+  customer: any | null;
+  quantum_id: number;
+  products: OzonOrderProduct[];
+  addressee: any | null;
+  barcodes: any | null;
+  analytics_data: any | null;
+  financial_data: any | null;
+  is_express: boolean;
+  requirements: {
+    products_requiring_gtd: any[];
+    products_requiring_country: any[];
+    products_requiring_mandatory_mark: any[];
+    products_requiring_rnpt: any[];
+    products_requiring_jw_uin: any[];
+  };
+  tariffication: {
+    current_tariff_rate: number;
+    current_tariff_type: string;
+    current_tariff_charge: string;
+    current_tariff_charge_currency_code: string;
+    next_tariff_rate: number;
+    next_tariff_type: string;
+    next_tariff_charge: string;
+    next_tariff_starts_at: string | null;
+    next_tariff_charge_currency_code: string;
+  };
+  ozon_token: number;
+}
+
+/**
+ * Интерфейс для данных юридического лица
+ */
+interface LegalEntity {
+  id: string;
+  title: string;
+  inn: string;
 }
 
 interface OzonOrdersProps {
@@ -119,7 +116,7 @@ const OzonOrders: React.FC<OzonOrdersProps> = ({ token }) => {
   const [orders, setOrders] = useState<OzonOrder[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedOrders, setSelectedOrders] = useState<Set<number | string>>(new Set());
+  const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState<boolean>(false);
   const [showTestData, setShowTestData] = useState<boolean>(false);
   const [rawResponse, setRawResponse] = useState<string>('');
@@ -134,131 +131,67 @@ const OzonOrders: React.FC<OzonOrdersProps> = ({ token }) => {
   const [tokenAddError, setTokenAddError] = useState<string | null>(null);
   const [tokenAddSuccess, setTokenAddSuccess] = useState<boolean>(false);
   
-  // Тестовые данные для таблицы
-  const testOrders: OzonOrder[] = [
-    {
-      id: 1,
-      order_id: 123456789,
-      order_number: "23169087-0004",
-      posting_number: "53158625-0001",
-      status: "delivered",
-      created_at: "2023-04-23T09:40:34+03:00",
-      in_process_at: "2023-04-23T09:45:22+03:00",
-      products: [
-        {
-          sku: 123456789,
-          name: "Смартфон Apple iPhone 13 Pro Max 256GB",
-          quantity: 1,
-          offer_id: "APPL-IPH-13PMAX-256",
-          price: 129990
-        }
-      ],
-      analytics_data: {
-        region: "Москва",
-        city: "Москва",
-        delivery_type: "PVZ",
-        is_premium: true,
-        payment_type_group_name: "Банковская карта",
-        warehouse_id: 12345,
-        warehouse_name: "ХОРУГВИНО_СКЛАД",
-        is_legal: false
-      },
-      customer: {
-        name: "Иван Иванов",
-        phone: "+79001234567"
-      },
-      delivery_method: {
-        id: 1001,
-        name: "Пункт выдачи",
-        tpl_provider: "Ozon Логистика",
-        warehouse: "ХОРУГВИНО_СКЛАД"
-      },
-      ozon_token_id: 1
-    },
-    {
-      id: 2,
-      order_id: 123456790,
-      order_number: "23169088-0005",
-      posting_number: "53158626-0002",
-      status: "awaiting_deliver",
-      created_at: "2023-04-23T10:45:22+03:00",
-      in_process_at: "2023-04-23T10:50:15+03:00",
-      products: [
-        {
-          sku: 123456790,
-          name: "Ноутбук Apple MacBook Pro 16 M1 Pro 2021",
-          quantity: 1,
-          offer_id: "APPL-MBP-16-M1P",
-          price: 249990
-        },
-        {
-          sku: 123456791,
-          name: "Защитная пленка для экрана MacBook Pro 16",
-          quantity: 1,
-          offer_id: "ACC-MBP-16-SCRN",
-          price: 1990
-        }
-      ],
-      analytics_data: {
-        region: "Санкт-Петербург",
-        city: "Санкт-Петербург",
-        delivery_type: "Courier",
-        is_premium: false,
-        payment_type_group_name: "Банковская карта",
-        warehouse_id: 12346,
-        warehouse_name: "СПБ_СКЛАД",
-        is_legal: false
-      },
-      customer: {
-        name: "Петр Петров",
-        phone: "+79009876543"
-      },
-      delivery_method: {
-        id: 1002,
-        name: "Курьерская доставка",
-        tpl_provider: "Ozon Логистика",
-        warehouse: "СПБ_СКЛАД"
-      },
-      ozon_token_id: 1
+  // Данные о выбранном юридическом лице
+  const [selectedLegalEntity, setSelectedLegalEntity] = useState<LegalEntity | null>(null);
+
+  // Загрузка данных о юр. лице из localStorage при монтировании компонента
+  useEffect(() => {
+    const legalEntityDataFromStorage = localStorage.getItem('selectedLegalEntityData');
+    
+    if (legalEntityDataFromStorage) {
+      try {
+        const parsedData = JSON.parse(legalEntityDataFromStorage);
+        setSelectedLegalEntity(parsedData);
+      } catch (e) {
+        console.error('Ошибка при парсинге данных юр. лица:', e);
+      }
     }
-  ];
+  }, []);
 
   // Загрузка заказов при монтировании компонента
   useEffect(() => {
-    if (!showTestData) {
-      fetchOrders();
-    } else {
-      setLoading(false);
-      setError(null);
-    }
-  }, [showTestData]);
+    fetchOrders();
+  }, [selectedLegalEntity]);
 
   // Функция для получения заказов
   const fetchOrders = async () => {
     setLoading(true);
     setError(null);
     setRawResponse('');
-    console.log('Отправка запроса на получение заказов Ozon...');
+    
+    if (!selectedLegalEntity) {
+      setError('Не выбрано юридическое лицо');
+      setLoading(false);
+      return;
+    }
     
     try {
-      // Использование сервиса Ozon для получения заказов
-      const ordersData = await ozonService.getOrders();
-      
-      // Сохраняем сырой ответ для отладки
-      setRawResponse(JSON.stringify(ordersData, null, 2));
-      
-      if (Array.isArray(ordersData)) {
-        console.log('Успешно получено заказов:', ordersData.length);
-        setOrders(ordersData);
-      } else if (ordersData && Array.isArray(ordersData.orders)) {
-        console.log('Успешно получено заказов:', ordersData.orders.length);
-        setOrders(ordersData.orders);
+      const response = await fetch('http://62.113.44.196:8080/api/v1/ozon-orders/', {
+        headers: {
+          'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133',
+          'accept': 'application/json',
+          'X-CSRFTOKEN': 'U0dM1l7bxFbZtOEmn4kPMb5bSjcwktcN88BmcpzaMQOPs3zhx3TuQgUJVWobs90c'
+        }
+      });
+
+      const text = await response.text();
+      setRawResponse(text);
+
+      if (!response.ok) {
+        throw new Error(`Ошибка HTTP: ${response.status}`);
+      }
+
+      const data = JSON.parse(text);
+      const orders = data.orders || [];
+
+      if (Array.isArray(orders)) {
+        console.log('Успешно получено заказов:', orders.length);
+        setOrders(orders);
       } else {
-        console.log('Неверный формат данных от сервера:', ordersData);
-        setError('Неверный формат данных от сервера. Массив заказов не найден.');
+        setError('Неверный формат данных от сервера');
       }
     } catch (err) {
-      console.error('❌ Ошибка при запросе:', err);
+      console.error('Ошибка при запросе:', err);
       if (err instanceof Error) {
         setError(err.message);
       } else {
@@ -288,46 +221,54 @@ const OzonOrders: React.FC<OzonOrdersProps> = ({ token }) => {
   };
 
   // Форматирование цены
-  const formatPrice = (price?: string | number) => {
+  const formatPrice = (price?: number) => {
     if (price === undefined || price === null) return '—';
-    
-    // Если цена передана как строка, преобразуем ее в число
-    const numPrice = typeof price === 'string' ? parseFloat(price) : price;
-    
-    if (isNaN(numPrice)) return price;
-    
     return new Intl.NumberFormat('ru-RU', {
       style: 'currency',
       currency: 'RUB',
       maximumFractionDigits: 0
-    }).format(numPrice);
+    }).format(price);
   };
 
   /**
    * Получение бейджа статуса заказа
    */
   const getStatusBadge = (order: OzonOrder) => {
-    const status = order.status?.toString() || 'unknown';
+    const status = order.status?.toLowerCase() || 'unknown';
     
-    switch (status.toLowerCase()) {
+    let bgColor = 'secondary';
+    let statusText = status;
+    
+    switch (status) {
       case 'awaiting_packaging':
-        return <Badge bg="primary">Ожидает упаковки</Badge>;
+        bgColor = 'primary';
+        statusText = 'Ожидает упаковки';
+        break;
       case 'awaiting_deliver':
-        return <Badge bg="info">Ожидает отгрузки</Badge>;
+        bgColor = 'info';
+        statusText = 'Ожидает доставки';
+        break;
       case 'delivering':
-        return <Badge bg="warning">Доставляется</Badge>;
+        bgColor = 'warning';
+        statusText = 'Доставляется';
+        break;
       case 'delivered':
-        return <Badge bg="success">Доставлен</Badge>;
+        bgColor = 'success';
+        statusText = 'Доставлен';
+        break;
       case 'cancelled':
-      case 'canceled':
-        return <Badge bg="danger">Отменен</Badge>;
+        bgColor = 'danger';
+        statusText = 'Отменен';
+        break;
       default:
-        return <Badge bg="secondary">{status}</Badge>;
+        statusText = status;
     }
+    
+    return <Badge bg={bgColor}>{statusText}</Badge>;
   };
 
   // Обработчик выбора одного заказа
-  const handleSelectOrder = (id: number | string) => {
+  const handleSelectOrder = (id: string) => {
     const newSelected = new Set(selectedOrders);
     if (newSelected.has(id)) {
       newSelected.delete(id);
@@ -335,35 +276,23 @@ const OzonOrders: React.FC<OzonOrdersProps> = ({ token }) => {
       newSelected.add(id);
     }
     setSelectedOrders(newSelected);
-    
-    // Проверка, все ли заказы выбраны
-    const items = showTestData ? testOrders : orders;
-    setSelectAll(newSelected.size === items.length);
+    setSelectAll(newSelected.size === orders.length);
   };
 
   // Обработчик выбора всех заказов
   const handleSelectAll = () => {
-    const items = showTestData ? testOrders : orders;
     if (selectAll) {
       setSelectedOrders(new Set());
     } else {
-      setSelectedOrders(new Set(items.map(order => order.id || order.order_id || 0)));
+      setSelectedOrders(new Set(orders.map(order => order.order_id)));
     }
     setSelectAll(!selectAll);
-  };
-
-  // Переключение между реальными и тестовыми данными
-  const toggleDataSource = () => {
-    setShowTestData(!showTestData);
   };
 
   // Переключатель для отображения сырого ответа
   const toggleRawResponse = () => {
     setShowRawResponse(!showRawResponse);
   };
-
-  // Определяем, какие данные отображать - тестовые или из API
-  const displayOrders = showTestData ? testOrders : orders;
 
   // Обработчик отправки формы добавления токена
   const handleAddToken = async (e: React.FormEvent) => {
@@ -433,19 +362,6 @@ const OzonOrders: React.FC<OzonOrdersProps> = ({ token }) => {
     setTokenAddSuccess(false);
   };
 
-  // Получение суммы заказа
-  const getOrderTotal = (order: OzonOrder): number => {
-    if (!order.products || !Array.isArray(order.products)) return 0;
-    
-    return order.products.reduce((sum, product) => {
-      const price = typeof product.price === 'string' 
-        ? parseFloat(product.price) 
-        : product.price || 0;
-      
-      return sum + (price * product.quantity);
-    }, 0);
-  };
-
   return (
     <Container fluid className="py-3">
       <Breadcrumb
@@ -460,22 +376,22 @@ const OzonOrders: React.FC<OzonOrdersProps> = ({ token }) => {
       <Row className="mb-4">
         <Col>
           <div className="d-flex justify-content-between align-items-center mb-4">
-            <h1 className="h3 mb-0">Заказы Ozon</h1>
             <div>
+              <h1 className="h3 mb-0">Заказы Ozon</h1>
+              {selectedLegalEntity && (
+                <p className="text-muted mb-0">
+                  Юридическое лицо: <strong>{selectedLegalEntity.title}</strong> (ИНН: {selectedLegalEntity.inn})
+                </p>
+              )}
+            </div>
+            <div className="d-flex gap-2">
               <Button 
-                variant="primary"
-                onClick={handleOpenAddToken}
-                type="button"
+                variant="outline-primary" 
+                size="sm" 
+                onClick={fetchOrders} 
                 className="me-2"
               >
-                <i className="bi bi-plus-circle"></i> Добавить токен
-              </Button>
-              <Button 
-                variant={showTestData ? "success" : "outline-success"}
-                onClick={toggleDataSource} 
-                className="me-2"
-              >
-                <i className="bi bi-database"></i> {showTestData ? "Тестовые данные (активно)" : "Тестовые данные"}
+                <i className="bi bi-arrow-repeat"></i> Обновить
               </Button>
               <Button 
                 variant={showRawResponse ? "info" : "outline-info"}
@@ -486,14 +402,14 @@ const OzonOrders: React.FC<OzonOrdersProps> = ({ token }) => {
               </Button>
               <Button 
                 variant="outline-secondary" 
-                onClick={() => navigate('/marketplace-settings/ozon')}
+                onClick={() => navigate(-1)}
               >
-                Назад к токенам
+                Назад
               </Button>
             </div>
           </div>
           
-          {error && !showTestData && (
+          {error && (
             <Alert variant="danger" dismissible onClose={() => setError(null)}>
               <Alert.Heading>Ошибка!</Alert.Heading>
               <p>{error}</p>
@@ -517,39 +433,20 @@ const OzonOrders: React.FC<OzonOrdersProps> = ({ token }) => {
             <Card.Header className="d-flex justify-content-between align-items-center">
               <h5 className="mb-0">Список заказов</h5>
               <div>
-                <Button 
-                  variant="outline-primary" 
-                  size="sm" 
-                  onClick={showTestData ? toggleDataSource : fetchOrders} 
-                  className="me-2"
-                >
-                  <i className="bi bi-arrow-repeat"></i> {showTestData ? "Показать реальные данные" : "Обновить"}
-                </Button>
                 <span className="text-muted">
-                  {showTestData 
-                    ? `Тестовые данные: ${testOrders.length} заказов` 
-                    : `Всего заказов: ${orders.length}`}
+                  Всего заказов: {orders.length}
                 </span>
               </div>
             </Card.Header>
             <Card.Body>
-              {loading && !showTestData ? (
+              {loading ? (
                 <div className="text-center py-5">
                   <Spinner animation="border" variant="primary" />
                   <p className="mt-3">Загрузка заказов...</p>
                 </div>
-              ) : displayOrders.length === 0 ? (
+              ) : orders.length === 0 ? (
                 <div className="text-center py-5">
                   <p className="mt-3">Заказы не найдены</p>
-                  {!showTestData && (
-                    <Button 
-                      variant="primary" 
-                      onClick={() => setShowTestData(true)} 
-                      className="mb-3"
-                    >
-                      Показать тестовые данные
-                    </Button>
-                  )}
                 </div>
               ) : (
                 <div className="table-responsive">
@@ -564,63 +461,43 @@ const OzonOrders: React.FC<OzonOrdersProps> = ({ token }) => {
                             aria-label="Выбрать все заказы"
                           />
                         </th>
-                        <th>ID заказа</th>
                         <th>Номер заказа</th>
-                        <th>Номер отправления</th>
                         <th>Дата создания</th>
-                        <th>Дата обработки</th>
                         <th>Статус</th>
                         <th>Товары</th>
                         <th>Сумма</th>
-                        <th>Регион</th>
-                        <th>Город</th>
-                        <th>Тип доставки</th>
-                        <th>Тип оплаты</th>
-                        <th>Покупатель</th>
+                        <th>Способ доставки</th>
                         <th>Склад</th>
-                        <th>Юр. лицо</th>
-                        <th>ID токена</th>
+                        <th>Трек-номер</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {displayOrders.map((order, index) => (
-                        <tr key={order.id || order.order_id || index}>
+                      {orders.map((order) => (
+                        <tr key={order.order_id}>
                           <td>
                             <Form.Check
                               type="checkbox"
-                              checked={selectedOrders.has(order.id || index)}
-                              onChange={() => handleSelectOrder(order.id || index)}
-                              aria-label={`Выбрать заказ ${order.id || order.order_id || index}`}
+                              checked={selectedOrders.has(order.order_id)}
+                              onChange={() => handleSelectOrder(order.order_id)}
+                              aria-label={`Выбрать заказ ${order.order_id}`}
                             />
                           </td>
-                          <td>{order.order_id || '—'}</td>
-                          <td>{order.order_number || '—'}</td>
-                          <td>{order.posting_number || '—'}</td>
-                          <td>{formatDate(order.created_at)}</td>
+                          <td>{order.posting_number}</td>
                           <td>{formatDate(order.in_process_at)}</td>
                           <td>{getStatusBadge(order)}</td>
                           <td>
-                            {order.products && order.products.length > 0 
-                              ? order.products.map(p => (
-                                <div key={p.offer_id} className="mb-1">
-                                  {p.name} x {p.quantity}
-                                </div>
-                              )) 
-                              : '—'}
+                            {order.products?.map((product, idx) => (
+                              <div key={idx}>
+                                {product.name} x {product.quantity} ({formatPrice(product.price)})
+                              </div>
+                            )) || '—'}
                           </td>
-                          <td>{formatPrice(getOrderTotal(order))}</td>
-                          <td>{order.analytics_data?.region || '—'}</td>
-                          <td>{order.analytics_data?.city || '—'}</td>
                           <td>
-                            {order.analytics_data?.delivery_type 
-                              ? <Badge bg="primary">{order.analytics_data.delivery_type}</Badge>
-                              : '—'}
+                            {formatPrice(order.products?.reduce((sum, product) => sum + product.price * product.quantity, 0))}
                           </td>
-                          <td>{order.analytics_data?.payment_type_group_name || '—'}</td>
-                          <td>{order.customer?.name || '—'}</td>
-                          <td>{order.delivery_method?.warehouse || order.analytics_data?.warehouse_name || '—'}</td>
-                          <td>{order.analytics_data?.is_legal ? 'Да' : 'Нет'}</td>
-                          <td>{order.ozon_token_id || '—'}</td>
+                          <td>{order.delivery_method?.name || '—'}</td>
+                          <td>{order.delivery_method?.warehouse || '—'}</td>
+                          <td>{order.tracking_number || '—'}</td>
                         </tr>
                       ))}
                     </tbody>

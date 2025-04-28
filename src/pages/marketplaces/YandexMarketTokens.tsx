@@ -18,7 +18,7 @@ import apiService from '../../services/api/api-service';
 /**
  * Компонент для управления токенами Яндекс Маркета
  */
-const YandexMarketTokens: React.FC = () => {
+const YandexMarketTokens: React.FC = (): JSX.Element => {
   // Состояния для списка токенов и загрузки
   const [tokens, setTokens] = useState<YandexMarketToken[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -80,7 +80,6 @@ const YandexMarketTokens: React.FC = () => {
   const fetchLegalEntities = async () => {
     try {
       setLoadingEntities(true);
-      // Исправленный URL - используем account-ip вместо legal-entities
       const response = await fetch('http://62.113.44.196:8080/api/v1/account-ip/', {
         headers: {
           'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133'
@@ -93,15 +92,31 @@ const YandexMarketTokens: React.FC = () => {
       
       const data = await response.json();
       
-      // Преобразуем данные для выпадающего списка с учетом новой структуры
-      const entities = data.map((entity: any) => ({
-        id: entity.id,
-        name: entity.title || `Юр. лицо ИНН: ${entity.inn}` || `Юр. лицо #${entity.id}`
-      }));
+      // Преобразуем данные для выпадающего списка
+      const entities = data.map((entity: any) => {
+        // Проверяем, что entity - это объект
+        if (typeof entity !== 'object' || entity === null) {
+          return {
+            id: 0,
+            name: 'Неизвестное юр. лицо'
+          };
+        }
+
+        // Извлекаем необходимые поля с проверкой
+        const id = typeof entity.id === 'number' ? entity.id : 0;
+        const title = typeof entity.title === 'string' ? entity.title : '';
+        const inn = typeof entity.inn === 'string' ? entity.inn : '';
+
+        return {
+          id,
+          name: title || `Юр. лицо ИНН: ${inn}` || `Юр. лицо #${id}`
+        };
+      });
       
       setLegalEntities(entities);
     } catch (err: any) {
       console.error('Ошибка при загрузке юр. лиц:', err);
+      setLegalEntities([]); // Устанавливаем пустой массив в случае ошибки
     } finally {
       setLoadingEntities(false);
     }
@@ -235,7 +250,14 @@ const YandexMarketTokens: React.FC = () => {
    */
   const getLegalEntityName = (id: number): string => {
     const entity = legalEntities.find(e => e.id === id);
-    return entity ? entity.name : `Юр. лицо #${id}`;
+    if (!entity) return `Юр. лицо #${id}`;
+    
+    // Проверяем, является ли entity объектом с полем name
+    if (typeof entity === 'object' && entity !== null && 'name' in entity) {
+      return entity.name;
+    }
+    
+    return `Юр. лицо #${id}`;
   };
 
   return (

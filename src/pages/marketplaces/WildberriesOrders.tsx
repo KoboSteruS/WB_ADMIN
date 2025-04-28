@@ -79,6 +79,9 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
   const [showTestData, setShowTestData] = useState<boolean>(false);
   const [rawResponse, setRawResponse] = useState<string>('');
   const [showRawResponse, setShowRawResponse] = useState<boolean>(false);
+  const [addToSupplyLoading, setAddToSupplyLoading] = useState<boolean>(false);
+  const [addToSupplyError, setAddToSupplyError] = useState<string | null>(null);
+  const [addToSupplySuccess, setAddToSupplySuccess] = useState<boolean>(false);
   
   // Данные о выбранном юридическом лице
   const [selectedLegalEntity, setSelectedLegalEntity] = useState<LegalEntity | null>(null);
@@ -522,6 +525,56 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
     setTokenAddSuccess(false);
   };
 
+  /**
+   * Добавление выбранных заказов в поставку
+   */
+  const handleAddToSupply = async () => {
+    if (selectedOrders.size === 0) {
+      setAddToSupplyError('Выберите хотя бы один заказ');
+      return;
+    }
+
+    setAddToSupplyLoading(true);
+    setAddToSupplyError(null);
+    setAddToSupplySuccess(false);
+
+    try {
+      const wb_token_id = 1; // Временно используем фиксированный ID токена
+      const orders = Array.from(selectedOrders);
+
+      const response = await fetch(
+        `http://62.113.44.196:8080/api/v1/wb-orders/add-to-supply/?wb_token_id=${encodeURIComponent(wb_token_id)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133',
+            'accept': 'application/json',
+            'X-CSRFTOKEN': 'P8r0lZl1tB9EHOBbJ8RnD27omtlYU5SB3gPAw3N0IMMuG3w6T7q2H7WWp6xD2LG0',
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body: new URLSearchParams({
+            'order': JSON.stringify(orders)
+          })
+        }
+      );
+
+      const text = await response.text();
+      try {
+        const data = JSON.parse(text);
+        console.log('Ответ от сервера (JSON):', data);
+        setAddToSupplySuccess(true);
+      } catch (e) {
+        console.log('Ответ от сервера (ТЕКСТ):', text);
+        setAddToSupplyError('Ошибка при обработке ответа сервера');
+      }
+    } catch (error) {
+      console.error('Ошибка запроса:', error);
+      setAddToSupplyError('Произошла ошибка при отправке запроса');
+    } finally {
+      setAddToSupplyLoading(false);
+    }
+  };
+
   return (
     <Container fluid className="py-3">
       <Breadcrumb
@@ -544,7 +597,33 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
                 </p>
               )}
             </div>
-            <div>
+            <div className="d-flex gap-2">
+              <Button
+                variant="success"
+                size="sm"
+                onClick={handleAddToSupply}
+                disabled={selectedOrders.size === 0 || addToSupplyLoading}
+              >
+                {addToSupplyLoading ? (
+                  <>
+                    <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
+                    Добавление...
+                  </>
+                ) : (
+                  <>
+                    <i className="bi bi-box-seam me-2"></i>
+                    Добавить в поставку ({selectedOrders.size})
+                  </>
+                )}
+              </Button>
+              <Button 
+                variant="outline-primary" 
+                size="sm" 
+                onClick={showTestData ? toggleDataSource : fetchOrders} 
+                className="me-2"
+              >
+                <i className="bi bi-arrow-repeat"></i> {showTestData ? "Показать реальные данные" : "Обновить"}
+              </Button>
               <Button 
                 variant="primary"
                 onClick={handleOpenAddToken}
@@ -552,13 +631,6 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
                 className="me-2"
               >
                 <i className="bi bi-plus-circle"></i> Добавить токен
-              </Button>
-              <Button 
-                variant={showTestData ? "success" : "outline-success"}
-                onClick={toggleDataSource} 
-                className="me-2"
-              >
-                <i className="bi bi-database"></i> {showTestData ? "Тестовые данные (активно)" : "Тестовые данные"}
               </Button>
               <Button 
                 variant={showRawResponse ? "info" : "outline-info"}
@@ -583,6 +655,20 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
             </Alert>
           )}
           
+          {addToSupplyError && (
+            <Alert variant="danger" className="mb-3">
+              <i className="bi bi-exclamation-triangle me-2"></i>
+              {addToSupplyError}
+            </Alert>
+          )}
+          
+          {addToSupplySuccess && (
+            <Alert variant="success" className="mb-3">
+              <i className="bi bi-check-circle me-2"></i>
+              Заказы успешно добавлены в поставку
+            </Alert>
+          )}
+          
           {showRawResponse && rawResponse && (
             <Card className="mb-4">
               <Card.Header>
@@ -600,14 +686,6 @@ const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) => {
             <Card.Header className="d-flex justify-content-between align-items-center">
               <h5 className="mb-0">Список заказов</h5>
               <div>
-                <Button 
-                  variant="outline-primary" 
-                  size="sm" 
-                  onClick={showTestData ? toggleDataSource : fetchOrders} 
-                  className="me-2"
-                >
-                  <i className="bi bi-arrow-repeat"></i> {showTestData ? "Показать реальные данные" : "Обновить"}
-                </Button>
                 <span className="text-muted">
                   {showTestData 
                     ? `Тестовые данные: ${testOrders.length} заказов` 
