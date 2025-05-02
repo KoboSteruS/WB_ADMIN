@@ -38,6 +38,42 @@ interface LegalEntity {
 }
 
 /**
+ * Интерфейс для данных заказа Wildberries
+ */
+interface WbOrder {
+  id: number;
+  address: string[];
+  ddate: string;
+  sale_price: number;
+  required_meta: string[];
+  delivery_type: number;
+  comment: string;
+  scan_price: number;
+  order_uid: string;
+  article: number;
+  color_code: number;
+  rid: number;
+  created_at: string;
+  offices: string[];
+  skus: string[];
+  order_id: number;
+  warehouse_id: number;
+  nm_id: number;
+  chrt_id: number;
+  price: number;
+  converted_price: number;
+  currency_code: number;
+  converted_currency_code: number;
+  cargo_type: number;
+  is_zero_order: boolean;
+  options: Record<string, any>;
+  wb_status: string;
+  own_status: string;
+  sticker: string;
+  wb_token: number;
+}
+
+/**
  * Компонент для отображения токенов Wildberries
  */
 const Wildberries: React.FC = () => {
@@ -626,6 +662,54 @@ const Wildberries: React.FC = () => {
     }
   };
 
+  /**
+   * Обновление заказов Wildberries
+   */
+  const updateWbOrders = async (tokenId: number) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetch('http://62.113.44.196:8080/api/v1/wb-orders/', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          wb_token: tokenId,
+          action: 'update_orders'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ошибка HTTP: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (data.success) {
+        // Выводим ID заказа в консоль
+        console.log('ID заказа:', data.id);
+        
+        // Обновляем список токенов после успешного обновления заказов
+        await fetchTokens();
+        return true;
+      } else {
+        throw new Error(data.message || 'Ошибка при обновлении заказов');
+      }
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Произошла ошибка при обновлении заказов');
+      }
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Container fluid className="py-3">
       <Breadcrumb
@@ -778,19 +862,6 @@ const Wildberries: React.FC = () => {
                                 title="Удалить токен"
                               >
                                 <i className="bi bi-trash"></i>
-                              </Button>
-                              <Button 
-                                variant="outline-info" 
-                                size="sm"
-                                onClick={() => handleRefreshToken(token.id)}
-                                disabled={updatingTokenId === token.id}
-                                title="Обновить информацию о токене"
-                              >
-                                {updatingTokenId === token.id ? (
-                                  <Spinner animation="border" size="sm" />
-                                ) : (
-                                  <i className="bi bi-arrow-clockwise"></i>
-                                )}
                               </Button>
                             </div>
                           </td>

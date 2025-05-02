@@ -155,30 +155,31 @@ const Dashboard: React.FC = () => {
                     <td>{entity.title}</td>
                     <td>{entity.inn}</td>
                     <td>
-                      <div className="btn-group">
+                      <div className="btn-group" style={{ gap: '15px' }}>
+                      <Button 
+                        variant="primary" 
+                        size="sm"
+                        onClick={() => handleViewWbOrders(entity)}
+                        style={{ backgroundColor: 'purple', border: '2px solid purple'}}
+                      >
+                        <i className="bi bi-box me-1"></i>
+                        Wildberries
+                      </Button>
                         <Button 
                           variant="primary" 
-                          size="sm"
-                          onClick={() => handleViewWbOrders(entity)}
-                        >
-                          <i className="bi bi-box me-1"></i>
-                          Заказы WB
-                        </Button>
-                        <Button 
-                          variant="info" 
-                          size="sm"
-                          onClick={() => handleViewYandexMarketOrders(entity)}
-                        >
-                          <i className="bi bi-box-seam me-1"></i>
-                          Заказы YM
-                        </Button>
-                        <Button 
-                          variant="warning" 
                           size="sm"
                           onClick={() => handleViewOzonOrders(entity)}
                         >
                           <i className="bi bi-box-arrow-right me-1"></i>
-                          Заказы OZ
+                          OZON
+                        </Button>
+                        <Button 
+                          variant="warning" 
+                          size="sm"
+                          onClick={() => handleViewYandexMarketOrders(entity)}
+                        >
+                          <i className="bi bi-box-seam me-1"></i>
+                          YandexMarket
                         </Button>
                       </div>
                     </td>

@@ -2,16 +2,13 @@ import React, { useState } from 'react';
 import Modal from 'react-bootstrap/Modal';
 import Button from 'react-bootstrap/Button';
 import Alert from 'react-bootstrap/Alert';
-import Spinner from 'react-bootstrap/Spinner';
+import { OzonToken } from '../../../services/api/types';
 
 interface DeleteTokenModalProps {
   show: boolean;
   onHide: () => void;
+  token: OzonToken | null;
   onDelete: (id: string) => Promise<void>;
-  token: {
-    id: string;
-    name: string;
-  } | null;
 }
 
 /**
@@ -20,47 +17,24 @@ interface DeleteTokenModalProps {
 const DeleteTokenModal: React.FC<DeleteTokenModalProps> = ({
   show,
   onHide,
-  onDelete,
-  token
+  token,
+  onDelete
 }) => {
-  const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<boolean>(false);
-
-  /**
-   * Сброс состояния модального окна
-   */
-  const resetState = () => {
-    setIsDeleting(false);
-    setError(null);
-    setSuccess(false);
-  };
-
-  /**
-   * Обработка закрытия модального окна
-   */
-  const handleClose = () => {
-    resetState();
-    onHide();
-  };
+  const [isLoading, setIsLoading] = useState(false);
 
   /**
    * Обработка удаления токена
    */
   const handleDelete = async () => {
     if (!token) return;
-    
-    setIsDeleting(true);
+
     setError(null);
-    
+    setIsLoading(true);
+
     try {
       await onDelete(token.id);
-      setSuccess(true);
-      
-      // Автоматически закрываем модальное окно после успешного удаления
-      setTimeout(() => {
-        handleClose();
-      }, 1500);
+      handleClose();
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message);
@@ -68,11 +42,22 @@ const DeleteTokenModal: React.FC<DeleteTokenModalProps> = ({
         setError('Произошла ошибка при удалении токена');
       }
     } finally {
-      setIsDeleting(false);
+      setIsLoading(false);
     }
   };
 
-  if (!token) return null;
+  /**
+   * Обработка закрытия модального окна
+   */
+  const handleClose = () => {
+    setError(null);
+    setIsLoading(false);
+    onHide();
+  };
+
+  if (!token) {
+    return null;
+  }
 
   return (
     <Modal
@@ -83,60 +68,41 @@ const DeleteTokenModal: React.FC<DeleteTokenModalProps> = ({
       centered
     >
       <Modal.Header closeButton>
-        <Modal.Title>Удаление токена</Modal.Title>
+        <Modal.Title>Удалить токен Ozon</Modal.Title>
       </Modal.Header>
       
       <Modal.Body>
         {error && (
-          <Alert variant="danger">{error}</Alert>
-        )}
-        
-        {success && (
-          <Alert variant="success">
-            Токен успешно удален!
+          <Alert variant="danger" className="mb-3">
+            {error}
           </Alert>
         )}
-        
-        {!success && (
-          <div>
-            <p>Вы действительно хотите удалить токен <strong>{token.name}</strong>?</p>
-            <p className="text-danger">Это действие нельзя отменить. После удаления все связанные с этим токеном операции будут недоступны.</p>
-          </div>
-        )}
+        <p>
+          Вы уверены, что хотите удалить токен с Client ID <strong>{token.client_id}</strong>?
+        </p>
+        <Alert variant="warning">
+          <p className="mb-0">
+            <strong>Внимание!</strong> Это действие нельзя отменить. После удаления токена все связанные с ним операции будут недоступны.
+          </p>
+        </Alert>
       </Modal.Body>
       
       <Modal.Footer>
         <Button 
           variant="secondary" 
           onClick={handleClose}
-          disabled={isDeleting}
+          disabled={isLoading}
         >
-          {success ? "Закрыть" : "Отмена"}
+          Отмена
         </Button>
         
-        {!success && (
-          <Button 
-            variant="danger" 
-            onClick={handleDelete}
-            disabled={isDeleting}
-          >
-            {isDeleting ? (
-              <>
-                <Spinner
-                  as="span"
-                  animation="border"
-                  size="sm"
-                  role="status"
-                  aria-hidden="true"
-                  className="me-2"
-                />
-                Удаление...
-              </>
-            ) : (
-              "Удалить"
-            )}
-          </Button>
-        )}
+        <Button 
+          variant="danger" 
+          onClick={handleDelete}
+          disabled={isLoading}
+        >
+          {isLoading ? 'Удаление...' : 'Удалить'}
+        </Button>
       </Modal.Footer>
     </Modal>
   );

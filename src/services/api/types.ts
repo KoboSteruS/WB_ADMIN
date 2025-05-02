@@ -315,29 +315,25 @@ export interface WildberriesTokenUpdateRequest {
   is_active?: boolean;
 }
 
-// Токены Ozon
+// Ozon
 export interface OzonToken {
-  id: number;
+  id: string;
   client_id: string;
   api_key: string;
-  name: string;
-  is_active: boolean;
   created_at: string;
   updated_at: string;
-  store_name?: string;
+  is_active: boolean;
   last_used?: string;
-  permissions?: string[];
+  error_message?: string;
 }
 
 export interface OzonTokenCreateRequest {
   client_id: string;
   api_key: string;
-  name: string;
 }
 
 export interface OzonTokenUpdateRequest {
   client_id?: string;
   api_key?: string;
-  name?: string;
   is_active?: boolean;
 } 

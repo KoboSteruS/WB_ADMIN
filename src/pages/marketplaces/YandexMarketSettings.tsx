@@ -29,26 +29,14 @@ const YandexMarketSettings: React.FC = () => {
     <Container fluid className="py-4">
       <Row className="mb-4">
         <Col>
-          <h1 className="page-title">Настройки Яндекс Маркета</h1>
-          <p className="text-muted">Управление интеграцией с Яндекс Маркетом</p>
+          <h1 className="page-title">Токены Яндекс Маркета</h1>
+          <p className="text-muted">Управление токенами для интеграции с Яндекс Маркетом</p>
         </Col>
       </Row>
 
       <Row>
         <Col>
           <Card>
-            <Card.Header>
-              <Nav variant="tabs" className="flex-row">
-                <Nav.Item>
-                  <Nav.Link 
-                    active={activeTab === 'tokens'} 
-                    onClick={() => setActiveTab('tokens')}
-                  >
-                    Токены API
-                  </Nav.Link>
-                </Nav.Item>
-              </Nav>
-            </Card.Header>
             <Card.Body>
               {renderTabContent()}
             </Card.Body>

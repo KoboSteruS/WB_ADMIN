@@ -154,6 +154,8 @@ const YandexMarketOrders: React.FC<YandexMarketOrdersProps> = ({ token }) => {
   const [selectAll, setSelectAll] = useState<boolean>(false);
   const [rawResponse, setRawResponse] = useState<string>('');
   const [showRawResponse, setShowRawResponse] = useState<boolean>(false);
+  const [sendingToShipment, setSendingToShipment] = useState<boolean>(false);
+  const [serverResponse, setServerResponse] = useState<string | null>(null);
   
   // Данные о выбранном юридическом лице
   const [selectedLegalEntity, setSelectedLegalEntity] = useState<LegalEntity | null>(null);
@@ -292,6 +294,7 @@ const YandexMarketOrders: React.FC<YandexMarketOrdersProps> = ({ token }) => {
    */
   const getStatusBadge = (order: YandexMarketOrder) => {
     const status = order.status?.toLowerCase() || 'unknown';
+    const substatus = order.substatus?.toLowerCase() || 'unknown';
     
     let bgColor = 'secondary';
     let statusText = status;
@@ -319,6 +322,16 @@ const YandexMarketOrders: React.FC<YandexMarketOrdersProps> = ({ token }) => {
         break;
       default:
         statusText = status;
+    }
+
+    // Если есть подстатус, показываем его отдельным бейджем
+    if (substatus && substatus !== 'unknown') {
+      return (
+        <div className="d-flex flex-column gap-1">
+          <Badge bg={bgColor}>{statusText}</Badge>
+          <Badge bg="info">Подстатус: {substatus}</Badge>
+        </div>
+      );
     }
     
     return <Badge bg={bgColor}>{statusText}</Badge>;
@@ -351,6 +364,66 @@ const YandexMarketOrders: React.FC<YandexMarketOrdersProps> = ({ token }) => {
     setShowRawResponse(!showRawResponse);
   };
 
+  /**
+   * Функция для отправки заказов в поставку
+   */
+  const handleSendToShipment = async () => {
+    if (selectedOrders.size === 0) {
+      setError('Выберите хотя бы один заказ для отправки в поставку');
+      return;
+    }
+
+    setSendingToShipment(true);
+    setError(null);
+    setServerResponse(null);
+
+    try {
+      const ym_orders = Array.from(selectedOrders);
+      const ym_token_id = orders[0]?.yandex_market_token;
+
+      if (!ym_token_id) {
+        throw new Error('Не удалось определить токен Яндекс Маркета');
+      }
+
+      const response = await fetch(
+        `http://62.113.44.196:8080/api/v1/yandex-market-orders/ready-to-ship/?yandex_market_token_id=${encodeURIComponent(ym_token_id)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133',
+            'Accept': 'application/json',
+            'X-CSRFTOKEN': 'P8r0lZl1tB9EHOBbJ8RnD27omtlYU5SB3gPAw3N0IMMuG3w6T7q2H7WWp6xD2LG0',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            orders: ym_orders
+          })
+        }
+      );
+
+      const text = await response.text();
+      try {
+        const data = JSON.parse(text);
+        console.log('Ответ от сервера (JSON):', data.response);
+        setServerResponse(JSON.stringify(data.response, null, 2));
+        // Очищаем выбранные заказы после успешной отправки
+        setSelectedOrders(new Set());
+        setSelectAll(false);
+        // Обновляем список заказов
+        await fetchOrders();
+      } catch (e) {
+        console.log('Ответ от сервера (ТЕКСТ):', text);
+        setServerResponse(text);
+        throw new Error('Неверный формат ответа от сервера');
+      }
+    } catch (err) {
+      console.error('Ошибка при отправке заказов:', err);
+      setError(err instanceof Error ? err.message : 'Произошла ошибка при отправке заказов');
+    } finally {
+      setSendingToShipment(false);
+    }
+  };
+
   return (
     <Container fluid className="py-3">
       <Breadcrumb
@@ -379,13 +452,33 @@ const YandexMarketOrders: React.FC<YandexMarketOrdersProps> = ({ token }) => {
                 size="sm" 
                 onClick={fetchOrders} 
                 className="me-2"
+                disabled={sendingToShipment}
               >
                 <i className="bi bi-arrow-repeat"></i> Обновить
+              </Button>
+              <Button 
+                variant="success"
+                size="sm"
+                onClick={handleSendToShipment}
+                className="me-2"
+                disabled={selectedOrders.size === 0 || sendingToShipment}
+              >
+                {sendingToShipment ? (
+                  <>
+                    <Spinner as="span" animation="border" size="sm" className="me-1" />
+                    Отправка...
+                  </>
+                ) : (
+                  <>
+                    <i className="bi bi-truck"></i> Отправить в поставку
+                  </>
+                )}
               </Button>
               <Button 
                 variant={showRawResponse ? "info" : "outline-info"}
                 onClick={toggleRawResponse} 
                 className="me-2"
+                disabled={sendingToShipment}
               >
                 <i className="bi bi-braces"></i> {showRawResponse ? "Скрыть ответ API" : "Показать ответ API"}
               </Button>
@@ -402,6 +495,15 @@ const YandexMarketOrders: React.FC<YandexMarketOrdersProps> = ({ token }) => {
             <Alert variant="danger" dismissible onClose={() => setError(null)}>
               <Alert.Heading>Ошибка!</Alert.Heading>
               <p>{error}</p>
+            </Alert>
+          )}
+
+          {serverResponse && (
+            <Alert variant="info" dismissible onClose={() => setServerResponse(null)}>
+              <Alert.Heading>Ответ от сервера</Alert.Heading>
+              <pre className="mb-0" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                {serverResponse}
+              </pre>
             </Alert>
           )}
           
@@ -442,7 +544,7 @@ const YandexMarketOrders: React.FC<YandexMarketOrdersProps> = ({ token }) => {
                   <Table hover bordered striped>
                     <thead>
                       <tr>
-                        <th>
+                        <th style={{ width: '40px' }}>
                           <Form.Check
                             type="checkbox"
                             checked={selectAll}
@@ -455,67 +557,104 @@ const YandexMarketOrders: React.FC<YandexMarketOrdersProps> = ({ token }) => {
                         <th>Статус</th>
                         <th>Товары</th>
                         <th>Сумма</th>
-                        <th>Адрес доставки</th>
+                        <th>Доставка</th>
                         <th>Тип доставки</th>
-                        <th>Покупатель</th>
-                        <th>Способ оплаты</th>
+                        <th>Служба доставки</th>
+                        <th>Адрес</th>
+                        <th>Токен YM</th>
+                        <th>Действия</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {orders.map((order, index) => (
-                        <tr key={order.order_id || index}>
-                          <td>
+                      {orders.map((order) => (
+                        <tr key={order.order_id}>
+                          <td className="text-center">
                             <Form.Check
                               type="checkbox"
-                              checked={selectedOrders.has(order.order_id || index)}
-                              onChange={() => handleSelectOrder(order.order_id || index)}
-                              aria-label={`Выбрать заказ ${order.order_id || index}`}
+                              checked={selectedOrders.has(order.order_id)}
+                              onChange={() => handleSelectOrder(order.order_id)}
+                              aria-label={`Выбрать заказ ${order.order_id}`}
                             />
                           </td>
-                          <td>{order.order_id || '—'}</td>
+                          <td>
+                            <div className="fw-bold">{order.order_id}</div>
+                            <small className="text-muted">
+                              {order.updatedAt && `Обновлен: ${formatDate(order.updatedAt)}`}
+                            </small>
+                          </td>
                           <td>{formatDate(order.creationDate)}</td>
                           <td>{getStatusBadge(order)}</td>
                           <td>
                             {order.items?.map((item, idx) => (
-                              <div key={idx}>
-                                {typeof item === 'object' && item !== null ? (
-                                  <>
-                                    {item.offerName || 'Без названия'} x {item.count || 0} ({formatPrice(item.price)})
-                                  </>
-                                ) : (
-                                  '—'
-                                )}
+                              <div key={idx} className="mb-1">
+                                <div className="d-flex justify-content-between">
+                                  <span className="text-truncate" style={{ maxWidth: '200px' }}>{item.offerName}</span>
+                                  <span className="text-muted ms-2">x{item.count}</span>
+                                </div>
+                                <small className="text-muted">
+                                  {formatPrice(item.price)} / шт.
+                                </small>
                               </div>
                             )) || '—'}
                           </td>
-                          <td>{formatPrice(order.buyerTotal)}</td>
+                          <td>
+                            <div className="fw-bold">
+                              {formatPrice(order.buyerTotal)}
+                            </div>
+                            {order.items?.length > 1 && (
+                              <small className="text-muted">
+                                {order.items.length} товара
+                              </small>
+                            )}
+                          </td>
+                          <td>
+                            <div className="mb-1">
+                              <strong>{order.delivery?.type || '—'}</strong>
+                            </div>
+                            <div className="small text-muted">
+                              {order.delivery?.serviceName && (
+                                <div>Служба: {order.delivery.serviceName}</div>
+                              )}
+                            </div>
+                          </td>
+                          <td>
+                            {order.delivery?.type ? (
+                              <Badge bg="primary">{String(order.delivery.type).toUpperCase()}</Badge>
+                            ) : '—'}
+                          </td>
+                          <td>{order.delivery?.serviceName || '—'}</td>
                           <td>
                             {order.delivery?.address ? (
-                              <>
-                                {order.delivery.region?.name || ''}, 
-                                {order.delivery.region?.parent?.name || ''}<br />
-                                {order.delivery.address.country}, {order.delivery.address.postcode}<br />
-                                {order.delivery.address.city}, {order.delivery.address.street}, {order.delivery.address.house}
-                                {order.delivery.address.gps && (
-                                  <div>
-                                    <br />
-                                    <small className="text-muted">
-                                      GPS: {order.delivery.address.gps.latitude}, {order.delivery.address.gps.longitude}
-                                    </small>
-                                  </div>
+                              <div className="small">
+                                <div>{order.delivery.address.city}</div>
+                                <div>{order.delivery.address.street}, {order.delivery.address.house}</div>
+                                {order.delivery.address.postcode && (
+                                  <div className="text-muted">Индекс: {order.delivery.address.postcode}</div>
                                 )}
-                              </>
+                              </div>
                             ) : '—'}
                           </td>
-                          <td>{typeof order.delivery?.type === 'string' ? order.delivery.type : '—'}</td>
+                          <td>{order.yandex_market_token || '—'}</td>
                           <td>
-                            {order.buyer ? (
-                              <>
-                                {typeof order.buyer.type === 'string' ? order.buyer.type : '—'}
-                              </>
-                            ) : '—'}
+                            <div className="d-flex gap-2 justify-content-center">
+                              <Button
+                                variant="outline-primary"
+                                size="sm"
+                                onClick={() => {/* TODO: Добавить просмотр деталей */}}
+                                title="Просмотр деталей"
+                              >
+                                <i className="bi bi-eye"></i>
+                              </Button>
+                              <Button
+                                variant="outline-secondary"
+                                size="sm"
+                                onClick={() => {/* TODO: Добавить печать */}}
+                                title="Печать"
+                              >
+                                <i className="bi bi-printer"></i>
+                              </Button>
+                            </div>
                           </td>
-                          <td>{typeof order.paymentMethod === 'string' ? order.paymentMethod : '—'}</td>
                         </tr>
                       ))}
                     </tbody>

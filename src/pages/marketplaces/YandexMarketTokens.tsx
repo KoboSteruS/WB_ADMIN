@@ -261,15 +261,9 @@ const YandexMarketTokens: React.FC = (): JSX.Element => {
   };
 
   return (
-    <Container fluid className="py-4">
-      <Row className="mb-4">
-        <Col>
-          <h1 className="page-title">Токены Яндекс Маркета</h1>
-          <p className="text-muted">Управление токенами для интеграции с Яндекс Маркетом</p>
-        </Col>
-      </Row>
+    <Container fluid className="py-0">
 
-      <Row className="mb-4">
+      <Row className="mb-0">
         <Col>
           <Card>
             <Card.Header className="d-flex justify-content-between align-items-center">
@@ -314,20 +308,40 @@ const YandexMarketTokens: React.FC = (): JSX.Element => {
                   <tbody>
                     {tokens.map((token) => (
                       <tr key={token.id}>
-                        <td>{token.id}</td>
-                        <td>{token.campaign_id}</td>
-                        <td className="text-nowrap">{maskApiKey(token.api_key)}</td>
-                        <td>{new Date(token.created_at).toLocaleString()}</td>
-                        <td>{getLegalEntityName(token.account_ip)}</td>
                         <td>
-                          <Button
-                            variant="outline-danger"
-                            size="sm"
-                            onClick={() => handleOpenDeleteModal(token)}
-                          >
-                            <i className="bi bi-trash me-1"></i>
-                            Удалить
-                          </Button>
+                          <div className="fw-bold">{token.id}</div>
+                          <small className="text-muted">ID: {token.id}</small>
+                        </td>
+                        <td>
+                          <div className="fw-bold">{token.campaign_id}</div>
+                          <small className="text-muted">Кампания</small>
+                        </td>
+                        <td>
+                          <div className="text-nowrap">
+                            <code className="bg-light px-2 py-1 rounded">
+                              {maskApiKey(token.api_key)}
+                            </code>
+                          </div>
+                          <small className="text-muted">API ключ</small>
+                        </td>
+                        <td>
+                          <div>{new Date(token.created_at).toLocaleString()}</div>
+                          <small className="text-muted">Создан</small>
+                        </td>
+                        <td>
+                          <div className="fw-bold">{getLegalEntityName(token.account_ip)}</div>
+                          <small className="text-muted">Юр. лицо</small>
+                        </td>
+                        <td>
+                          <div className="btn-group">
+                            <Button
+                              variant="outline-danger"
+                              size="sm"
+                              onClick={() => handleOpenDeleteModal(token)}
+                            >
+                              <i className="bi bi-trash"></i>
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))}
