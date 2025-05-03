@@ -91,6 +91,7 @@ interface OzonOrder {
     next_tariff_charge_currency_code: string;
   };
   ozon_token: number;
+  substatus?: string;
 }
 
 /**
@@ -134,6 +135,19 @@ const OzonOrders: React.FC<OzonOrdersProps> = ({ token }) => {
   // Данные о выбранном юридическом лице
   const [selectedLegalEntity, setSelectedLegalEntity] = useState<LegalEntity | null>(null);
 
+  // Добавляем состояния для добавления в поставку
+  const [addToSupplyLoading, setAddToSupplyLoading] = useState<boolean>(false);
+  const [addToSupplyError, setAddToSupplyError] = useState<string | null>(null);
+  const [addToSupplySuccess, setAddToSupplySuccess] = useState<boolean>(false);
+
+  // Добавляем состояние для списка юридических лиц
+  const [legalEntities, setLegalEntities] = useState<LegalEntity[]>([]);
+  const [legalEntitiesLoading, setLegalEntitiesLoading] = useState<boolean>(true);
+  const [legalEntitiesError, setLegalEntitiesError] = useState<string | null>(null);
+
+  // Добавляем состояние для выбранного юр. лица в модальном окне
+  const [selectedModalLegalEntity, setSelectedModalLegalEntity] = useState<string>('');
+
   // Загрузка данных о юр. лице из localStorage при монтировании компонента
   useEffect(() => {
     const legalEntityDataFromStorage = localStorage.getItem('selectedLegalEntityData');
@@ -150,8 +164,13 @@ const OzonOrders: React.FC<OzonOrdersProps> = ({ token }) => {
 
   // Загрузка заказов при монтировании компонента
   useEffect(() => {
-    fetchOrders();
+      fetchOrders();
   }, [selectedLegalEntity]);
+
+  // Загрузка юридических лиц при монтировании компонента
+  useEffect(() => {
+    fetchLegalEntities();
+  }, []);
 
   // Функция для получения заказов
   const fetchOrders = async () => {
@@ -202,6 +221,41 @@ const OzonOrders: React.FC<OzonOrdersProps> = ({ token }) => {
     }
   };
 
+  // Функция для получения списка юридических лиц
+  const fetchLegalEntities = async () => {
+    try {
+      setLegalEntitiesLoading(true);
+      setLegalEntitiesError(null);
+      
+      const response = await fetch('http://62.113.44.196:8080/api/v1/account-ip/', {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ошибка HTTP: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (Array.isArray(data)) {
+        setLegalEntities(data);
+      } else {
+        setLegalEntitiesError('Неверный формат данных от сервера');
+      }
+    } catch (err) {
+      if (err instanceof Error) {
+        setLegalEntitiesError(err.message);
+      } else {
+        setLegalEntitiesError('Произошла ошибка при загрузке юридических лиц');
+      }
+    } finally {
+      setLegalEntitiesLoading(false);
+    }
+  };
+
   // Форматирование даты
   const formatDate = (dateString?: string) => {
     if (!dateString) return '—';
@@ -235,6 +289,7 @@ const OzonOrders: React.FC<OzonOrdersProps> = ({ token }) => {
    */
   const getStatusBadge = (order: OzonOrder) => {
     const status = order.status?.toLowerCase() || 'unknown';
+    const substatus = order.substatus?.toLowerCase() || 'unknown';
     
     let bgColor = 'secondary';
     let statusText = status;
@@ -262,6 +317,16 @@ const OzonOrders: React.FC<OzonOrdersProps> = ({ token }) => {
         break;
       default:
         statusText = status;
+    }
+
+    // Если есть подстатус, показываем его отдельным бейджем
+    if (substatus && substatus !== 'unknown') {
+      return (
+        <div className="d-flex flex-column gap-1">
+          <Badge bg={bgColor}>{statusText}</Badge>
+          <Badge bg="info">Подстатус: {substatus}</Badge>
+        </div>
+      );
     }
     
     return <Badge bg={bgColor}>{statusText}</Badge>;
@@ -362,6 +427,67 @@ const OzonOrders: React.FC<OzonOrdersProps> = ({ token }) => {
     setTokenAddSuccess(false);
   };
 
+  /**
+   * Добавление выбранных заказов в поставку
+   */
+  const handleAddToSupply = async () => {
+    if (selectedOrders.size === 0) {
+      setAddToSupplyError('Выберите хотя бы один заказ');
+      return;
+    }
+
+    setAddToSupplyLoading(true);
+    setAddToSupplyError(null);
+    setAddToSupplySuccess(false);
+
+    try {
+      // Получаем ID токена из первого выбранного заказа
+      const firstSelectedOrder = orders.find(order => selectedOrders.has(order.order_id));
+      if (!firstSelectedOrder || !firstSelectedOrder.ozon_token) {
+        setAddToSupplyError('Не удалось определить токен Ozon');
+        return;
+      }
+
+      const ozon_token_id = firstSelectedOrder.ozon_token;
+      
+      // Получаем posting_numbers из выбранных заказов
+      const posting_numbers = orders
+        .filter(order => selectedOrders.has(order.order_id))
+        .map(order => order.posting_number);
+
+      const response = await fetch(
+        `http://62.113.44.196:8080/api/v1/ozon-orders/add-to-supply/?ozon_token_id=${encodeURIComponent(ozon_token_id)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133',
+            'Accept': 'application/json',
+            'X-CSRFTOKEN': 'P8r0lZl1tB9EHOBbJ8RnD27omtlYU5SB3gPAw3N0IMMuG3w6T7q2H7WWp6xD2LG0',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            posting_numbers: posting_numbers
+          })
+        }
+      );
+
+      const text = await response.text();
+      try {
+        const data = JSON.parse(text);
+        console.log('Ответ от сервера (JSON):', data.response);
+        setAddToSupplySuccess(true);
+      } catch (e) {
+        console.log('Ответ от сервера (ТЕКСТ):', text);
+        setAddToSupplyError('Ошибка при обработке ответа сервера');
+      }
+    } catch (error) {
+      console.error('Ошибка запроса:', error);
+      setAddToSupplyError('Произошла ошибка при отправке запроса');
+    } finally {
+      setAddToSupplyLoading(false);
+    }
+  };
+
   return (
     <Container fluid className="py-3">
       <Breadcrumb
@@ -385,6 +511,24 @@ const OzonOrders: React.FC<OzonOrdersProps> = ({ token }) => {
               )}
             </div>
             <div className="d-flex gap-2">
+              <Button 
+                variant="success"
+                size="sm"
+                onClick={handleAddToSupply}
+                disabled={selectedOrders.size === 0 || addToSupplyLoading}
+              >
+                {addToSupplyLoading ? (
+                  <>
+                    <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
+                    Добавление...
+                  </>
+                ) : (
+                  <>
+                    <i className="bi bi-box-seam me-2"></i>
+                    Добавить в поставку ({selectedOrders.size})
+                  </>
+                )}
+              </Button>
               <Button 
                 variant="outline-primary" 
                 size="sm" 
@@ -429,6 +573,20 @@ const OzonOrders: React.FC<OzonOrdersProps> = ({ token }) => {
             </Card>
           )}
           
+          {addToSupplyError && (
+            <Alert variant="danger" className="mb-3">
+              <i className="bi bi-exclamation-triangle me-2"></i>
+              {addToSupplyError}
+            </Alert>
+          )}
+          
+          {addToSupplySuccess && (
+            <Alert variant="success" className="mb-3">
+              <i className="bi bi-check-circle me-2"></i>
+              Заказы успешно добавлены в поставку
+            </Alert>
+          )}
+          
           <Card>
             <Card.Header className="d-flex justify-content-between align-items-center">
               <h5 className="mb-0">Список заказов</h5>
@@ -453,7 +611,7 @@ const OzonOrders: React.FC<OzonOrdersProps> = ({ token }) => {
                   <Table hover bordered striped>
                     <thead>
                       <tr>
-                        <th>
+                        <th style={{ width: '40px' }}>
                           <Form.Check
                             type="checkbox"
                             checked={selectAll}
@@ -461,20 +619,23 @@ const OzonOrders: React.FC<OzonOrdersProps> = ({ token }) => {
                             aria-label="Выбрать все заказы"
                           />
                         </th>
-                        <th>Номер заказа</th>
+                        <th>ID заказа</th>
                         <th>Дата создания</th>
                         <th>Статус</th>
                         <th>Товары</th>
                         <th>Сумма</th>
-                        <th>Способ доставки</th>
+                        <th>Доставка</th>
+                        <th>Тип доставки</th>
                         <th>Склад</th>
-                        <th>Трек-номер</th>
+                        <th>Трек номер</th>
+                        <th>Токен Ozon</th>
+                        <th>Действия</th>
                       </tr>
                     </thead>
                     <tbody>
                       {orders.map((order) => (
                         <tr key={order.order_id}>
-                          <td>
+                          <td className="text-center">
                             <Form.Check
                               type="checkbox"
                               checked={selectedOrders.has(order.order_id)}
@@ -482,22 +643,78 @@ const OzonOrders: React.FC<OzonOrdersProps> = ({ token }) => {
                               aria-label={`Выбрать заказ ${order.order_id}`}
                             />
                           </td>
-                          <td>{order.posting_number}</td>
-                          <td>{formatDate(order.in_process_at)}</td>
+                          <td>
+                            <div className="fw-bold">{order.posting_number}</div>
+                            <small className="text-muted">ID: {order.order_id}</small>
+                          </td>
+                          <td>
+                            <div>{formatDate(order.in_process_at)}</div>
+                            <small className="text-muted">
+                              {order.shipment_date && `Отгрузка: ${formatDate(order.shipment_date)}`}
+                            </small>
+                          </td>
                           <td>{getStatusBadge(order)}</td>
                           <td>
                             {order.products?.map((product, idx) => (
-                              <div key={idx}>
-                                {product.name} x {product.quantity} ({formatPrice(product.price)})
+                              <div key={idx} className="mb-1">
+                                <div className="d-flex justify-content-between">
+                                  <span className="text-truncate" style={{ maxWidth: '200px' }}>{product.name}</span>
+                                  <span className="text-muted ms-2">x{product.quantity}</span>
+                                </div>
+                                <small className="text-muted">
+                                  {formatPrice(product.price)} / шт.
+                                </small>
                               </div>
                             )) || '—'}
                           </td>
                           <td>
-                            {formatPrice(order.products?.reduce((sum, product) => sum + product.price * product.quantity, 0))}
+                            <div className="fw-bold">
+                              {formatPrice(order.products?.reduce((sum, product) => sum + product.price * product.quantity, 0))}
+                            </div>
+                            {order.products?.length > 1 && (
+                              <small className="text-muted">
+                                {order.products.length} товара
+                              </small>
+                            )}
                           </td>
-                          <td>{order.delivery_method?.name || '—'}</td>
+                          <td>
+                            <div className="mb-1">
+                              <strong>{order.delivery_method?.name || '—'}</strong>
+                            </div>
+                            <div className="small text-muted">
+                              {order.delivery_method?.warehouse && (
+                                <div>Склад: {order.delivery_method.warehouse}</div>
+                              )}
+                            </div>
+                          </td>
+                          <td>
+                            {order.delivery_method?.id ? (
+                              <Badge bg="primary">{String(order.delivery_method.id).toUpperCase()}</Badge>
+                            ) : '—'}
+                          </td>
                           <td>{order.delivery_method?.warehouse || '—'}</td>
                           <td>{order.tracking_number || '—'}</td>
+                          <td>{order.ozon_token || '—'}</td>
+                          <td>
+                            <div className="d-flex gap-2 justify-content-center">
+                              <Button
+                                variant="outline-primary"
+                                size="sm"
+                                onClick={() => {/* TODO: Добавить просмотр деталей */}}
+                                title="Просмотр деталей"
+                              >
+                                <i className="bi bi-eye"></i>
+                              </Button>
+                              <Button
+                                variant="outline-secondary"
+                                size="sm"
+                                onClick={() => {/* TODO: Добавить печать */}}
+                                title="Печать"
+                              >
+                                <i className="bi bi-printer"></i>
+                              </Button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -530,6 +747,25 @@ const OzonOrders: React.FC<OzonOrdersProps> = ({ token }) => {
           )}
           
           <Form onSubmit={handleAddToken}>
+            <Form.Group className="mb-3">
+              <Form.Label>Юридическое лицо</Form.Label>
+              <Form.Select
+                value={selectedModalLegalEntity}
+                onChange={(e) => setSelectedModalLegalEntity(e.target.value)}
+                required
+              >
+                <option value="">Выберите юридическое лицо</option>
+                {legalEntities.map(entity => (
+                  <option key={entity.id} value={entity.id}>
+                    {entity.title} (ИНН: {entity.inn})
+                  </option>
+                ))}
+              </Form.Select>
+              {legalEntitiesError && (
+                <Form.Text className="text-danger">{legalEntitiesError}</Form.Text>
+              )}
+            </Form.Group>
+            
             <Form.Group className="mb-3">
               <Form.Label>Название токена (опционально)</Form.Label>
               <Form.Control
@@ -573,7 +809,7 @@ const OzonOrders: React.FC<OzonOrdersProps> = ({ token }) => {
           <Button 
             variant="primary" 
             onClick={handleAddToken} 
-            disabled={tokenAddLoading || !newClientId.trim() || !newApiKey.trim()}
+            disabled={tokenAddLoading || !newClientId.trim() || !newApiKey.trim() || !selectedModalLegalEntity}
           >
             {tokenAddLoading ? (
               <>

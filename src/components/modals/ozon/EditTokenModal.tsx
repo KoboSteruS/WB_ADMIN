@@ -1,211 +1,127 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, ChangeEvent, FormEvent } from 'react';
 import Modal from 'react-bootstrap/Modal';
 import Button from 'react-bootstrap/Button';
 import Form from 'react-bootstrap/Form';
 import Alert from 'react-bootstrap/Alert';
-import Spinner from 'react-bootstrap/Spinner';
-
-interface TokenData {
-  id: string;
-  name: string;
-}
+import { OzonToken, OzonTokenUpdateRequest } from '../../../services/api/types';
 
 interface EditTokenModalProps {
   show: boolean;
   onHide: () => void;
-  onSubmit: (tokenData: TokenData) => Promise<void>;
-  token: TokenData | null;
+  token: OzonToken | null;
+  onSubmit: (data: OzonTokenUpdateRequest) => Promise<void>;
 }
 
 /**
  * Модальное окно для редактирования токена Ozon
  */
-const EditTokenModal: React.FC<EditTokenModalProps> = ({
-  show,
-  onHide,
-  onSubmit,
-  token
-}) => {
-  // Состояние формы
-  const [tokenName, setTokenName] = useState<string>('');
-  
-  // Состояние валидации
-  const [validated, setValidated] = useState<boolean>(false);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+const EditTokenModal: React.FC<EditTokenModalProps> = ({ show, onHide, token, onSubmit }) => {
+  const [clientId, setClientId] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [isActive, setIsActive] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  /**
-   * Инициализация формы при получении токена
-   */
+  // Обновляем состояние при изменении токена
   useEffect(() => {
     if (token) {
-      setTokenName(token.name);
+      setClientId(token.client_id);
+      setApiKey(token.api_key);
+      setIsActive(token.is_active);
     }
   }, [token]);
 
-  /**
-   * Очистка формы и сброс состояний
-   */
-  const resetForm = () => {
-    if (token) {
-      setTokenName(token.name);
-    } else {
-      setTokenName('');
-    }
-    setValidated(false);
-    setIsSubmitting(false);
-    setError(null);
-    setSuccess(false);
-  };
-
-  /**
-   * Обработка закрытия модального окна
-   */
-  const handleClose = () => {
-    resetForm();
-    onHide();
-  };
-  
-  /**
-   * Обработка отправки формы
-   */
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const form = e.currentTarget;
-    
-    // Проверка валидности формы
-    if (!form.checkValidity() || !token) {
-      e.stopPropagation();
-      setValidated(true);
-      return;
-    }
-    
-    setValidated(true);
-    setIsSubmitting(true);
     setError(null);
-    
+    setIsLoading(true);
+
     try {
-      await onSubmit({ 
-        id: token.id, 
-        name: tokenName.trim() 
+      await onSubmit({
+        client_id: clientId,
+        api_key: apiKey,
+        is_active: isActive
       });
-      setSuccess(true);
-      
-      // Автоматически закрываем форму через некоторое время
-      setTimeout(() => {
-        handleClose();
-      }, 1500);
+      handleClose();
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Произошла ошибка при обновлении токена');
+        setError('Произошла ошибка при редактировании токена');
       }
     } finally {
-      setIsSubmitting(false);
+      setIsLoading(false);
     }
   };
 
-  // Сброс сообщения об ошибке при изменении полей
-  useEffect(() => {
-    if (error) {
-      setError(null);
-    }
-  }, [tokenName]);
+  const handleClose = () => {
+    setClientId('');
+    setApiKey('');
+    setIsActive(true);
+    setError(null);
+    setIsLoading(false);
+    onHide();
+  };
+
+  if (!token) {
+    return null;
+  }
 
   return (
-    <Modal
-      show={show}
-      onHide={handleClose}
-      backdrop="static"
-      keyboard={false}
-      centered
-    >
-      <Form noValidate validated={validated} onSubmit={handleSubmit}>
+    <Modal show={show} onHide={handleClose} backdrop="static" keyboard={false}>
+      <Form onSubmit={handleSubmit}>
         <Modal.Header closeButton>
-          <Modal.Title>Редактирование токена Ozon</Modal.Title>
+          <Modal.Title>Редактировать токен Ozon</Modal.Title>
         </Modal.Header>
-        
         <Modal.Body>
-          {!token && (
-            <Alert variant="danger">
-              Токен не найден. Пожалуйста, закройте окно и попробуйте снова.
-            </Alert>
-          )}
-          
           {error && (
-            <Alert variant="danger">{error}</Alert>
-          )}
-          
-          {success && (
-            <Alert variant="success">
-              Токен успешно обновлен!
+            <Alert variant="danger" className="mb-3">
+              {error}
             </Alert>
           )}
-          
-          {token && !success && (
-            <Form.Group className="mb-3">
-              <Form.Label>Название токена</Form.Label>
-              <Form.Control
-                type="text"
-                placeholder="Например: Основной аккаунт"
-                value={tokenName}
-                onChange={(e) => setTokenName(e.target.value)}
-                required
-                disabled={isSubmitting}
-              />
-              <Form.Control.Feedback type="invalid">
-                Пожалуйста, укажите название токена
-              </Form.Control.Feedback>
-              <Form.Text className="text-muted">
-                Используйте понятное название для удобной идентификации токена
-              </Form.Text>
-              
-              <div className="mt-3">
-                <Alert variant="info">
-                  <p className="mb-0">
-                    <strong>Обратите внимание:</strong> Редактировать можно только название токена. 
-                    Если вам необходимо изменить сам токен, пожалуйста, удалите его и добавьте новый.
-                  </p>
-                </Alert>
-              </div>
-            </Form.Group>
-          )}
+          <Form.Group className="mb-3">
+            <Form.Label>Client ID</Form.Label>
+            <Form.Control
+              type="text"
+              placeholder="Введите Client ID"
+              value={clientId}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setClientId(e.target.value)}
+              required
+            />
+            <Form.Text className="text-muted">
+              Идентификатор клиента из личного кабинета Ozon
+            </Form.Text>
+          </Form.Group>
+          <Form.Group className="mb-3">
+            <Form.Label>API ключ</Form.Label>
+            <Form.Control
+              type="password"
+              placeholder="Введите API ключ"
+              value={apiKey}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setApiKey(e.target.value)}
+              required
+            />
+            <Form.Text className="text-muted">
+              API ключ из личного кабинета Ozon
+            </Form.Text>
+          </Form.Group>
+          <Form.Group className="mb-3">
+            <Form.Check
+              type="switch"
+              id="isActive"
+              label="Активен"
+              checked={isActive}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setIsActive(e.target.checked)}
+            />
+          </Form.Group>
         </Modal.Body>
-        
         <Modal.Footer>
-          <Button 
-            variant="secondary" 
-            onClick={handleClose}
-            disabled={isSubmitting}
-          >
-            {success ? "Закрыть" : "Отмена"}
+          <Button variant="secondary" onClick={handleClose} disabled={isLoading}>
+            Отмена
           </Button>
-          
-          {token && !success && (
-            <Button 
-              variant="primary" 
-              type="submit"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <>
-                  <Spinner
-                    as="span"
-                    animation="border"
-                    size="sm"
-                    role="status"
-                    aria-hidden="true"
-                    className="me-2"
-                  />
-                  Сохранение...
-                </>
-              ) : (
-                "Сохранить изменения"
-              )}
-            </Button>
-          )}
+          <Button variant="primary" type="submit" disabled={isLoading}>
+            {isLoading ? 'Сохранение...' : 'Сохранить'}
+          </Button>
         </Modal.Footer>
       </Form>
     </Modal>

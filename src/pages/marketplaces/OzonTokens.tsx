@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect, lazy, Suspense, useRef } from 'react';
 import Container from 'react-bootstrap/Container';
 import Row from 'react-bootstrap/Row';
 import Col from 'react-bootstrap/Col';
@@ -9,91 +9,42 @@ import Badge from 'react-bootstrap/Badge';
 import Spinner from 'react-bootstrap/Spinner';
 import Alert from 'react-bootstrap/Alert';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPlus, faEdit, faTrash, faCheck, faTimes, faSyncAlt, faQuestion } from '@fortawesome/free-solid-svg-icons';
-import apiService from '../../services/api';
+import { faPlus, faEdit, faTrash, faCheck, faTimes, faSyncAlt, faQuestion, faCopy } from '@fortawesome/free-solid-svg-icons';
 import Breadcrumb from '../../components/Breadcrumb';
 import AlertLink from '../../components/AlertLink';
+import Modal from 'react-bootstrap/Modal';
+import Form from 'react-bootstrap/Form';
+import apiService from '../../services/api/api-service';
+import { OzonToken, OzonTokenCreateRequest, OzonTokenUpdateRequest } from '../../services/api/types';
 
-// Добавляем функцию для получения токенов Озон с внешнего API
-const fetchOzonTokensFromExternalAPI = async () => {
-  try {
-    const response = await fetch('http://62.113.44.196:8080/api/v1/ozon-tokens/', {
-      method: 'GET',
-      headers: {
-        'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133'
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Ошибка HTTP: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    // Выводим полученные данные в консоль
-    if (Array.isArray(data)) {
-      console.log('Успешно получено:', data);
-      data.forEach(order => {
-        console.log('---');
-        console.log('Всё:', order);
-        console.log('Всё:', order.id);
-        console.log('Всё:', order.client_id);
-        console.log('TOKEN:', order.api_key);
-        console.log('Всё:', order.created_at);
-        console.log('Всё:', order.account_ip);
-      });
-      
-      // Возвращаем данные для дальнейшей обработки
-      return data.map(item => ({
-        id: item.id,
-        name: `Токен ${item.client_id || 'без имени'}`,
-        token: item.api_key || '',
-        active: true,
-        lastChecked: item.created_at,
-        isValid: true
-      }));
-    } else {
-      console.log('Ответ сервера не является массивом:', data);
-      return [];
-    }
-  } catch (error) {
-    console.error('Ошибка при запросе токенов Озон:', error);
-    throw error;
-  }
-};
-
-// Ленивая загрузка модальных окон
+// Импорт модальных окон
 const AddTokenModal = lazy(() => import('../../components/modals/ozon/AddTokenModal'));
 const EditTokenModal = lazy(() => import('../../components/modals/ozon/EditTokenModal'));
 const DeleteTokenModal = lazy(() => import('../../components/modals/ozon/DeleteTokenModal'));
 
-interface Token {
-  id: string;
-  name: string;
-  token: string;
-  active: boolean;
-  lastChecked?: string;
-  isValid?: boolean;
-}
-
-interface TokenData {
-  client_id: string;
-  api_key: string;
-  account_ip: number;
-}
-
-interface TokenEditData {
-  id: string;
-  name: string;
-}
+/**
+ * Маскирование API ключа для отображения
+ */
+const maskApiKey = (key: string): string => {
+  if (!key) return '';
+  if (key.length <= 16) return key;
+  return `${key.substring(0, 8)}...${key.substring(key.length - 8)}`;
+};
 
 /**
- * Страница управления токенами Ozon
+ * Получение названия юр. лица по ID
+ */
+const getLegalEntityName = (id: number): string => {
+  // TODO: Реализовать получение названия юр. лица
+  return `Юр. лицо #${id}`;
+};
+
+/**
+ * Компонент для отображения списка токенов Ozon
  */
 const OzonTokens: React.FC = () => {
-  // Состояние списка токенов
-  const [tokens, setTokens] = useState<Token[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [tokens, setTokens] = useState<OzonToken[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
@@ -101,11 +52,9 @@ const OzonTokens: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
   const [showEditModal, setShowEditModal] = useState<boolean>(false);
   const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false);
-  const [selectedToken, setSelectedToken] = useState<Token | null>(null);
-  
-  // Состояния для операций с токенами
-  const [testingTokenId, setTestingTokenId] = useState<string | null>(null);
-  const [togglingTokenId, setTogglingTokenId] = useState<string | null>(null);
+  const [selectedToken, setSelectedToken] = useState<OzonToken | null>(null);
+  const [selectedRows, setSelectedRows] = useState<string[]>([]);
+  const tokenRefs = useRef<{ [key: string]: HTMLSpanElement | null }>({});
 
   /**
    * Загрузка списка токенов
@@ -117,9 +66,22 @@ const OzonTokens: React.FC = () => {
       
       // Пытаемся получить токены из внешнего API
       try {
-        const externalTokens = await fetchOzonTokensFromExternalAPI();
-        setTokens(externalTokens || []);
+        const response = await fetch('http://62.113.44.196:8080/api/v1/ozon-tokens/', {
+          headers: {
+            'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133'
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Ошибка HTTP: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        if (Array.isArray(data)) {
+          setTokens(data);
         return;
+        }
       } catch (externalError) {
         console.warn('Не удалось загрузить токены из внешнего API, используем встроенный API:', externalError);
       }
@@ -148,9 +110,8 @@ const OzonTokens: React.FC = () => {
   /**
    * Обработчик добавления нового токена
    */
-  const handleAddToken = async (tokenData: TokenData) => {
+  const handleAddToken = async (tokenData: OzonTokenCreateRequest) => {
     try {
-      // Отправляем запрос напрямую вместо использования apiService
       const response = await fetch('http://62.113.44.196:8080/api/v1/ozon-tokens/', {
         method: 'POST',
         headers: {
@@ -182,13 +143,33 @@ const OzonTokens: React.FC = () => {
   /**
    * Обработчик редактирования токена
    */
-  const handleEditToken = async (tokenData: TokenEditData) => {
+  const handleEditToken = async (tokenData: OzonTokenUpdateRequest) => {
+    if (!selectedToken) return;
+
     try {
-      await apiService.marketplaceCredentials.updateOzonToken(tokenData);
+      const response = await fetch(`http://62.113.44.196:8080/api/v1/ozon-tokens/${selectedToken.id}/`, {
+        method: 'PUT',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(tokenData)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ошибка HTTP: ${response.status}`);
+      }
+
       await loadTokens();
-      return Promise.resolve();
-    } catch (error) {
-      return Promise.reject(error);
+      setShowEditModal(false);
+      setSelectedToken(null);
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Произошла ошибка при редактировании токена');
+      }
     }
   };
 
@@ -197,77 +178,28 @@ const OzonTokens: React.FC = () => {
    */
   const handleDeleteToken = async (id: string) => {
     try {
-      await apiService.marketplaceCredentials.deleteOzonToken(id);
+      const response = await fetch(`http://62.113.44.196:8080/api/v1/ozon-tokens/${id}/`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ошибка HTTP: ${response.status}`);
+      }
+
       await loadTokens();
+      setShowDeleteModal(false);
+      setSelectedToken(null);
       return Promise.resolve();
-    } catch (error) {
-      return Promise.reject(error);
-    }
-  };
-
-  /**
-   * Обработчик включения/отключения токена
-   */
-  const handleToggleTokenActive = async (id: string, active: boolean) => {
-    try {
-      setTogglingTokenId(id);
-      await apiService.marketplaceCredentials.toggleOzonTokenActive(id, !active);
-      
-      // Обновляем локальное состояние
-      setTokens(prevTokens => 
-        prevTokens.map(token => 
-          token.id === id ? { ...token, active: !active } : token
-        )
-      );
     } catch (err) {
       if (err instanceof Error) {
-        alert(`Ошибка при изменении статуса токена: ${err.message}`);
+        setError(err.message);
       } else {
-        alert('Произошла ошибка при изменении статуса токена');
+        setError('Произошла ошибка при удалении токена');
       }
-    } finally {
-      setTogglingTokenId(null);
-    }
-  };
-
-  /**
-   * Обработчик проверки токена
-   */
-  const handleTestToken = async (id: string) => {
-    try {
-      setTestingTokenId(id);
-      // Здесь должен быть запрос к API для проверки токена Ozon
-      const result = await apiService.marketplaceCredentials.testOzonToken(id);
-      
-      // Обновляем локальное состояние
-      setTokens(prevTokens => 
-        prevTokens.map(token => 
-          token.id === id ? { 
-            ...token, 
-            lastChecked: new Date().toISOString(),
-            isValid: result.success
-          } : token
-        )
-      );
-    } catch (err) {
-      // Обновляем статус на недействительный в случае ошибки
-      setTokens(prevTokens => 
-        prevTokens.map(token => 
-          token.id === id ? { 
-            ...token, 
-            lastChecked: new Date().toISOString(),
-            isValid: false
-          } : token
-        )
-      );
-      
-      if (err instanceof Error) {
-        alert(`Ошибка при проверке токена: ${err.message}`);
-      } else {
-        alert('Произошла ошибка при проверке токена');
-      }
-    } finally {
-      setTestingTokenId(null);
+      return Promise.reject(err);
     }
   };
 
@@ -283,7 +215,7 @@ const OzonTokens: React.FC = () => {
   /**
    * Открыть модальное окно для редактирования токена
    */
-  const openEditModal = (token: Token) => {
+  const openEditModal = (token: OzonToken) => {
     setSelectedToken(token);
     setShowEditModal(true);
   };
@@ -291,35 +223,26 @@ const OzonTokens: React.FC = () => {
   /**
    * Открыть модальное окно для удаления токена
    */
-  const openDeleteModal = (token: Token) => {
+  const openDeleteModal = (token: OzonToken) => {
     setSelectedToken(token);
     setShowDeleteModal(true);
   };
 
-  /**
-   * Рендеринг статуса валидности токена
-   */
-  const renderTokenValidity = (token: Token) => {
-    if (token.isValid === undefined) {
-      return (
-        <Badge bg="secondary">
-          <FontAwesomeIcon icon={faQuestion} className="me-1" />
-          Не проверен
-        </Badge>
-      );
+  // Копирование токена в буфер обмена
+  const handleCopyToken = async (token: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(token);
+      if (tokenRefs.current[id]) {
+        tokenRefs.current[id]!.textContent = 'Скопировано!';
+        setTimeout(() => {
+          if (tokenRefs.current[id]) {
+            tokenRefs.current[id]!.textContent = 'Копировать';
+          }
+        }, 1200);
+      }
+    } catch {
+      alert('Ошибка копирования');
     }
-    
-    return token.isValid ? (
-      <Badge bg="success">
-        <FontAwesomeIcon icon={faCheck} className="me-1" />
-        Действителен
-      </Badge>
-    ) : (
-      <Badge bg="danger">
-        <FontAwesomeIcon icon={faTimes} className="me-1" />
-        Недействителен
-      </Badge>
-    );
   };
 
   return (
@@ -333,139 +256,101 @@ const OzonTokens: React.FC = () => {
         ]}
       />
 
-      <h1 className="h3 mb-4">Управление токенами Ozon</h1>
-      
+      <h1 className="h3 mb-4">Токены Ozon</h1>
       <Row className="mb-4">
         <Col>
           <Card>
             <Card.Header className="d-flex justify-content-between align-items-center">
-              <h5 className="mb-0">Список токенов</h5>
+              <div className="fw-bold">Токены API</div>
               <div>
-                <Button 
-                  variant="outline-secondary" 
-                  className="me-2"
-                  onClick={handleRefresh}
-                  disabled={isLoading || refreshing}
-                >
-                  {refreshing ? (
-                    <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true"/>
-                  ) : (
-                    <FontAwesomeIcon icon={faSyncAlt} />
-                  )}
-                  <span className="d-none d-md-inline ms-1">Обновить</span>
+                <Button variant="outline-primary" size="sm" className="me-2" onClick={handleRefresh} disabled={isLoading}>
+                  <i className="bi bi-arrow-clockwise"></i> Обновить
                 </Button>
-                <Button 
-                  variant="primary" 
-                  onClick={() => setShowAddModal(true)}
-                >
-                  <FontAwesomeIcon icon={faPlus} />
-                  <span className="ms-1">Добавить токен</span>
-                </Button>
+                <span className="text-muted">Всего токенов: {tokens.length}</span>
               </div>
             </Card.Header>
             <Card.Body>
               {error && (
-                <Alert variant="danger">
-                  {error}
-                </Alert>
+                <Alert variant="danger">{error}</Alert>
               )}
-              
-              {isLoading ? (
-                <div className="text-center py-5">
-                  <Spinner animation="border" variant="primary" />
-                  <p className="mt-3">Загрузка токенов...</p>
-                </div>
-              ) : tokens.length === 0 ? (
-                <Alert variant="info">
-                  Токены Ozon не найдены. Добавьте токен для работы с API Ozon.
-                </Alert>
-              ) : (
                 <div className="table-responsive">
-                  <Table striped hover>
+                <Table bordered hover size="sm" className="align-middle mb-0">
                     <thead>
                       <tr>
-                        <th>Название</th>
-                        <th>Токен</th>
-                        <th>Статус</th>
-                        <th>Валидность</th>
+                      <th style={{ width: 40 }}>
+                        <Form.Check
+                          type="checkbox"
+                          checked={selectedRows.length === tokens.length && tokens.length > 0}
+                          onChange={e => setSelectedRows(e.target.checked ? tokens.map(t => t.id) : [])}
+                        />
+                      </th>
+                      <th>ID</th>
+                      <th>TOKEN</th>
+                      <th>Time</th>
+                      <th>Account_id</th>
+                      <th>Account_title</th>
+                      <th>Account_inn</th>
                         <th>Действия</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {tokens.map(token => (
+                    {tokens.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="text-center text-muted">Токены Ozon не найдены</td>
+                      </tr>
+                    ) : (
+                      tokens.map(token => (
                         <tr key={token.id}>
-                          <td>{token.name}</td>
-                          <td>
-                            <code>
-                              {token.token.substring(0, 7)}...
-                              {token.token.substring(token.token.length - 7)}
-                            </code>
+                          <td className="text-center">
+                            <Form.Check
+                              type="checkbox"
+                              checked={selectedRows.includes(token.id)}
+                              onChange={e => setSelectedRows(e.target.checked ? [...selectedRows, token.id] : selectedRows.filter(id => id !== token.id))}
+                            />
                           </td>
+                          <td>{token.id}</td>
                           <td>
-                            {token.active ? (
-                              <Badge bg="success">Активен</Badge>
-                            ) : (
-                              <Badge bg="secondary">Неактивен</Badge>
-                            )}
+                            <div style={{ fontFamily: 'monospace' }}>
+                              {token.api_key ? maskApiKey(token.api_key) : '—'}
+                            </div>
+                            <Button
+                              variant="link"
+                              size="sm"
+                              className="p-0"
+                              style={{ fontSize: 13 }}
+                              onClick={() => handleCopyToken(token.api_key, token.id)}
+                            >
+                              <span ref={el => tokenRefs.current[token.id] = el}>Копировать</span>
+                            </Button>
                           </td>
-                          <td>{renderTokenValidity(token)}</td>
-                          <td>
-                            <div className="btn-group">
-                              <Button 
-                                variant="outline-primary" 
-                                size="sm" 
-                                onClick={() => openEditModal(token)}
-                                title="Редактировать"
-                              >
-                                <FontAwesomeIcon icon={faEdit} />
-                              </Button>
-                              
-                              <Button 
-                                variant="outline-secondary" 
-                                size="sm" 
-                                onClick={() => handleToggleTokenActive(token.id, token.active)}
-                                disabled={togglingTokenId === token.id}
-                                title={token.active ? "Деактивировать" : "Активировать"}
-                              >
-                                {togglingTokenId === token.id ? (
-                                  <Spinner animation="border" size="sm" />
-                                ) : token.active ? (
-                                  <FontAwesomeIcon icon={faTimes} />
-                                ) : (
-                                  <FontAwesomeIcon icon={faCheck} />
-                                )}
-                              </Button>
-                              
-                              <Button 
-                                variant="outline-info" 
-                                size="sm" 
-                                onClick={() => handleTestToken(token.id)}
-                                disabled={testingTokenId === token.id}
-                                title="Проверить токен"
-                              >
-                                {testingTokenId === token.id ? (
-                                  <Spinner animation="border" size="sm" />
-                                ) : (
-                                  <FontAwesomeIcon icon={faSyncAlt} />
-                                )}
-                              </Button>
-                              
+                          <td>{token.created_at ? new Date(token.created_at).toLocaleString('ru-RU') : '—'}</td>
+                          <td>{(token as any).account_ip || '—'}</td>
+                          <td>{(token as any).account_title || 'Не указано'}</td>
+                          <td>{(token as any).account_inn || '—'}</td>
+                          <td className="text-center">
                               <Button 
                                 variant="outline-danger" 
                                 size="sm" 
+                              className="me-1"
+                              title="Удалить"
                                 onClick={() => openDeleteModal(token)}
-                                title="Удалить"
                               >
-                                <FontAwesomeIcon icon={faTrash} />
+                              <i className="bi bi-trash"></i>
                               </Button>
-                            </div>
                           </td>
                         </tr>
-                      ))}
+                      ))
+                    )}
                     </tbody>
                   </Table>
                 </div>
-              )}
+              <Button
+                variant="primary"
+                className="mt-3"
+                onClick={() => setShowAddModal(true)}
+              >
+                <i className="bi bi-plus-circle me-2"></i>Добавить токен
+              </Button>
             </Card.Body>
           </Card>
         </Col>
@@ -499,31 +384,23 @@ const OzonTokens: React.FC = () => {
       
       {/* Модальные окна */}
       <Suspense fallback={<div>Загрузка...</div>}>
-        {showAddModal && (
           <AddTokenModal
             show={showAddModal}
             onHide={() => setShowAddModal(false)}
             onSubmit={handleAddToken}
           />
-        )}
-        
-        {showEditModal && selectedToken && (
           <EditTokenModal
             show={showEditModal}
             onHide={() => setShowEditModal(false)}
+          token={selectedToken}
             onSubmit={handleEditToken}
-            token={selectedToken}
           />
-        )}
-        
-        {showDeleteModal && selectedToken && (
           <DeleteTokenModal
             show={showDeleteModal}
             onHide={() => setShowDeleteModal(false)}
-            onDelete={() => handleDeleteToken(selectedToken.id)}
             token={selectedToken}
+          onDelete={handleDeleteToken}
           />
-        )}
       </Suspense>
     </Container>
   );

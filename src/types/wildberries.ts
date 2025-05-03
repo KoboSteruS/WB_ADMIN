@@ -295,4 +295,94 @@ export interface WildberriesApiError {
   code: string;
   message: string;
   details?: any;
+}
+
+/**
+ * Типы данных для работы с API Wildberries
+ */
+
+/**
+ * Интерфейс для данных заказа Wildberries
+ */
+export interface WbOrder {
+  id?: number;
+  address?: string[] | string | null;
+  ddate?: string | null;
+  sale_price?: string | number;
+  required_meta?: any[];
+  delivery_type?: string | number;
+  comment?: string;
+  scan_price?: string | number | null;
+  order_uid?: string;
+  article?: string | number;
+  color_code?: string | number;
+  rid?: string | number;
+  created_at?: string;
+  offices?: string[];
+  skus?: string[];
+  order_id?: string | number;
+  warehouse_id?: number;
+  nm_id?: number;
+  chrt_id?: number;
+  price?: string | number;
+  converted_price?: string | number;
+  currency_code?: number;
+  converted_currency_code?: number;
+  cargo_type?: number;
+  is_zero_order?: boolean;
+  options?: {
+    [key: string]: any;
+  };
+  wb_status?: string;
+  own_status?: string;
+  sticker?: string;
+  wb_token?: number;
+  supply_id?: string;
+  [key: string]: any;
+}
+
+/**
+ * Интерфейс для данных юридического лица
+ */
+export interface LegalEntity {
+  id: string;
+  title: string;
+  inn: string;
+}
+
+/**
+ * Интерфейс для пропсов компонента WildberriesOrders
+ */
+export interface WildberriesOrdersProps {
+  token?: string;
+}
+
+/**
+ * Интерфейс для результата запроса списка заказов 
+ */
+export interface WbOrdersResponse {
+  orders: WbOrder[];
+}
+
+/**
+ * Интерфейс для запроса изменения статуса
+ */
+export interface ChangeStatusRequest {
+  orders: (number | string)[];
+  status: string;
+}
+
+/**
+ * Интерфейс для запроса добавления токена
+ */
+export interface AddTokenRequest {
+  token: string;
+  name?: string;
+}
+
+/**
+ * Интерфейс для запроса доставки
+ */
+export interface ShippingRequest {
+  supplyId: string[];
 } 

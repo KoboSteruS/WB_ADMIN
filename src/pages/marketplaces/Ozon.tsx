@@ -190,8 +190,8 @@ const Ozon: React.FC = () => {
         </Row>
       )}
 
-      <Row>
-        <Col lg={8}>
+      <Row className='card'>
+        <Col>
 
           <Card className="mb-4">
             <Card.Header className="d-flex justify-content-between align-items-center">
