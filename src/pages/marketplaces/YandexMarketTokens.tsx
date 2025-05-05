@@ -268,13 +268,24 @@ const YandexMarketTokens: React.FC = (): JSX.Element => {
           <Card>
             <Card.Header className="d-flex justify-content-between align-items-center">
               <h2 className="card-title m-0">Список токенов</h2>
-              <Button 
-                variant="primary" 
-                onClick={() => setShowCreateModal(true)}
-              >
-                <i className="bi bi-plus-circle me-2"></i>
-                Добавить токен
-              </Button>
+              <div>
+                <Button 
+                  variant="primary" 
+                  onClick={() => setShowCreateModal(true)}
+                >
+                  <i className="bi bi-plus-circle me-2"></i>
+                  Добавить токен
+                </Button>
+                <Button 
+                  variant="outline-primary" 
+                  onClick={fetchTokens}
+                  className="me-2"
+                >
+                  <i className="bi bi-arrow-repeat me-1"></i>
+                  Обновить
+                </Button>
+              </div>
+              
             </Card.Header>
             <Card.Body>
               {loading ? (

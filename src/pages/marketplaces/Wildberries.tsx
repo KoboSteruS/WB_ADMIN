@@ -738,6 +738,12 @@ const Wildberries: React.FC = () => {
               <h5 className="mb-0">Токены API</h5>
               <div className="d-flex align-items-center gap-3">
                 {refreshing && <Spinner animation="border" size="sm" />}
+                <Button 
+                variant="primary" 
+                onClick={() => setShowAddTokenModal(true)}
+              >
+                <i className="bi bi-plus-circle me-1"></i> Добавить токен
+              </Button>
                 <Button
                   variant="outline-primary"
                   size="sm"
@@ -748,9 +754,6 @@ const Wildberries: React.FC = () => {
                   <i className="bi bi-arrow-clockwise me-1"></i>
                   {refreshing ? 'Обновление...' : 'Обновить'}
                 </Button>
-                {!loading && (
-                  <span className="text-muted">Всего токенов: {tokens.length}</span>
-                )}
               </div>
             </Card.Header>
             <Card.Body>
@@ -873,12 +876,7 @@ const Wildberries: React.FC = () => {
               )}
             </Card.Body>
             <Card.Footer>
-              <Button 
-                variant="primary" 
-                onClick={() => setShowAddTokenModal(true)}
-              >
-                <i className="bi bi-plus-circle me-1"></i> Добавить токен
-              </Button>
+
             </Card.Footer>
           </Card>
         </Col>

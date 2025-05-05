@@ -637,57 +637,28 @@ const Dashboard: React.FC = () => {
   };
 
   /**
-   * Экспорт заказов Ozon в CSV
-   */
-  const exportOzonOrdersToCsv = () => {
-    const selectedOrdersData = getSelectedOzonOrdersData();
-    
-    if (selectedOrdersData.length === 0) {
-      alert('Выберите хотя бы один заказ для экспорта');
-      return;
-    }
-    
-    // Заголовки CSV
-    const headers = ['ID заказа', 'Дата создания', 'Название товара', 'Артикул', 'Статус', 'Цена продажи', 'Город', 'Способ доставки'];
-    
-    // Формируем строки данных
-    const rows = selectedOrdersData.map(order => [
-      order.order_id || '',
-      order.created_at || order.created_date || '',
-      order.product_name || order.name || '',
-      order.sku || order.article || '',
-      order.status || '',
-      order.price || order.sale_price || '',
-      order.city || '',
-      order.delivery_type || ''
-    ]);
-    
-    // Объединяем заголовки и строки
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\n');
-    
-    // Создаем Blob
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    
-    // Создаем ссылку для скачивания
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    
-    // Настраиваем и запускаем скачивание
-    link.setAttribute('href', url);
-    link.setAttribute('download', `ozon_orders_${new Date().toISOString().slice(0, 10)}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  /**
    * Получает следующий статус для заказов Яндекс Маркет
    */
   const getNextYandexStatus = (currentStatus: string): string => {
+    const upperStatus = currentStatus.toUpperCase();
+    
+    // Обрабатываем статусы Яндекс Маркет
+    if (upperStatus === 'PROCESSING') {
+      // Смотрим, есть ли конкретный подстатус
+      const selected = getSelectedYandexOrdersData();
+      if (selected.length > 0) {
+        const substatus = selected[0].substatus?.toUpperCase();
+        
+        if (substatus === 'READY_TO_SHIP') {
+          return 'SHIPPED'; // Если подстатус READY_TO_SHIP, следующий шаг - SHIPPED
+        } else {
+          return 'READY_TO_SHIP'; // Иначе переводим в READY_TO_SHIP
+        }
+      }
+      return 'READY_TO_SHIP'; // По умолчанию - в готовый к отправке
+    } 
+    
+    // Для остальных статусов используем стандартную логику
     switch (currentStatus.toLowerCase()) {
       case 'new':
         return 'processing';
@@ -696,8 +667,17 @@ const Dashboard: React.FC = () => {
       case 'ready_to_ship':
         return 'shipped';
       default:
-        return 'new';
+        return 'processing';
     }
+  };
+
+  /**
+   * Получает данные выбранных заказов Яндекс Маркет
+   */
+  const getSelectedYandexOrdersData = (): YandexMarketOrder[] => {
+    return ymOrders.filter(order => 
+      selectedYmOrders.has(order.id || order.order_id || '')
+    );
   };
 
   /**
@@ -729,6 +709,27 @@ const Dashboard: React.FC = () => {
    * Получает текст для кнопки смены статуса Яндекс Маркет
    */
   const getYandexStatusButtonText = (status: string): string => {
+    const upperStatus = status.toUpperCase();
+    
+    // Обрабатываем статусы Яндекс Маркет
+    if (upperStatus === 'PROCESSING') {
+      // Смотрим, есть ли конкретный подстатус
+      const selected = getSelectedYandexOrdersData();
+      if (selected.length > 0) {
+        const substatus = selected[0].substatus?.toUpperCase();
+        
+        if (substatus === 'READY_TO_SHIP') {
+          return 'Отправить'; // Если подстатус READY_TO_SHIP, следующий шаг - отправка
+        } else {
+          return 'Подготовить к отправке'; // Иначе подготавливаем к отправке
+        }
+      }
+      return 'Подготовить к отправке'; // По умолчанию - подготовка к отправке
+    } else if (upperStatus === 'SHIPPED') {
+      return 'Отправлено';
+    }
+    
+    // Для остальных статусов используем стандартную логику
     switch (status.toLowerCase()) {
       case 'new':
         return 'Начать обработку';
@@ -743,15 +744,6 @@ const Dashboard: React.FC = () => {
       default:
         return 'Сменить статус';
     }
-  };
-
-  /**
-   * Получает данные выбранных заказов Яндекс Маркет
-   */
-  const getSelectedYandexOrdersData = (): YandexMarketOrder[] => {
-    return ymOrders.filter(order => 
-      selectedYmOrders.has(order.id || order.order_id || '')
-    );
   };
 
   /**
@@ -803,104 +795,6 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  /**
-   * Экспорт заказов Яндекс Маркет в CSV
-   */
-  const exportYandexOrdersToCsv = () => {
-    const selectedOrdersData = getSelectedYandexOrdersData();
-    
-    if (selectedOrdersData.length === 0) {
-      alert('Выберите хотя бы один заказ для экспорта');
-      return;
-    }
-    
-    // Заголовки CSV
-    const headers = ['ID заказа', 'Дата создания', 'Название товара', 'Код товара', 'Статус', 'Стоимость', 'Регион', 'Тип доставки'];
-    
-    // Формируем строки данных
-    const rows = selectedOrdersData.map(order => [
-      order.order_id || '',
-      order.created_at || order.created_date || '',
-      order.name || order.product_name || '',
-      order.shop_sku || order.offer_id || '',
-      order.status || '',
-      order.price || order.total_price || '',
-      order.region || order.delivery_region || '',
-      order.delivery_type || ''
-    ]);
-    
-    // Объединяем заголовки и строки
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\n');
-    
-    // Создаем Blob
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    
-    // Создаем ссылку для скачивания
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    
-    // Настраиваем и запускаем скачивание
-    link.setAttribute('href', url);
-    link.setAttribute('download', `yandex_market_orders_${new Date().toISOString().slice(0, 10)}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  // Дебаг-функция для проверки загрузки заказов Яндекс Маркета
-  const debugLoadYandexOrders = async () => {
-    if (!selectedLegalEntity) {
-      setYmOrdersError("Не выбрано юридическое лицо");
-      return;
-    }
-    
-    console.log("Отладка загрузки заказов Яндекс.Маркет");
-    console.log("Юр. лицо:", selectedLegalEntity);
-
-    setYmOrdersLoading(true);
-    setYmOrdersError(null);
-    
-    try {
-      // Тестовые данные для отладки
-      const testOrders: YandexMarketOrder[] = [
-        {
-          id: 1,
-          order_id: 'YM-12345',
-          created_at: new Date().toISOString(),
-          name: 'Тестовый товар Яндекс',
-          shop_sku: 'YM-SKU-001',
-          status: 'new',
-          price: 2500,
-          region: 'Москва',
-          delivery_type: 'Курьер'
-        },
-        {
-          id: 2,
-          order_id: 'YM-12346',
-          created_at: new Date().toISOString(),
-          name: 'Тестовый товар 2 Яндекс',
-          shop_sku: 'YM-SKU-002',
-          status: 'processing',
-          price: 3500,
-          region: 'Санкт-Петербург',
-          delivery_type: 'Пункт выдачи'
-        }
-      ];
-      
-      console.log("Установка тестовых данных:", testOrders);
-      setYmOrders(testOrders);
-    } catch (error) {
-      console.error('Ошибка при загрузке тестовых заказов:', error);
-      setYmOrdersError('Ошибка при загрузке тестовых заказов');
-    } finally {
-      setYmOrdersLoading(false);
-    }
-  };
-
   return (
     <Container fluid className="dashboard-container">
       <Row className="mb-4">
@@ -914,10 +808,6 @@ const Dashboard: React.FC = () => {
         <Col>
           <div className="d-flex justify-content-between align-items-center mb-3">
             <h2 className="section-title mb-0">Юридические лица</h2>
-            <Button variant="primary" onClick={handleManageLegalEntities}>
-              <i className="bi bi-gear me-2"></i>
-              Управление юр. лицами
-            </Button>
           </div>
           
           {loading ? (
@@ -1242,16 +1132,6 @@ const Dashboard: React.FC = () => {
                     )}
                   </Button>
                   
-                  <Button
-                    variant="outline-success"
-                    size="sm"
-                    onClick={exportOzonOrdersToCsv}
-                    disabled={selectedOzonOrders.size === 0}
-                    className="me-2"
-                  >
-                    <i className="bi bi-file-earmark-excel me-1"></i> Экспорт в CSV
-                  </Button>
-                  
                   <Button 
                     variant="outline-primary" 
                     size="sm" 
@@ -1291,12 +1171,13 @@ const Dashboard: React.FC = () => {
                             />
                           </th>
                           <th>ID заказа</th>
+                          <th>Номер отправления</th>
                           <th>Дата создания</th>
                           <th>Название</th>
                           <th>Артикул</th>
                           <th>Статус</th>
                           <th>Цена продажи</th>
-                          <th>Город</th>
+                          <th>Склад</th>
                           <th>Способ доставки</th>
                         </tr>
                       </thead>
@@ -1312,17 +1193,18 @@ const Dashboard: React.FC = () => {
                               />
                             </td>
                             <td>{order.order_id || '—'}</td>
-                            <td>{formatDate(order.created_at || order.created_date)}</td>
+                            <td>{order.posting_number || '—'}</td>
+                            <td>{formatDate(order.in_process_at || order.created_at || order.created_date)}</td>
                             <td>{order.product_name || order.name || '—'}</td>
-                            <td>{order.sku || order.article || '—'}</td>
+                            <td>{order.sku || order.offer_id || '—'}</td>
                             <td>
                               <Badge bg={getBadgeColor(order.status)}>
                                 {getStatusText(order.status)}
                               </Badge>
                             </td>
                             <td>{formatPrice(order.price || order.sale_price)}</td>
-                            <td>{order.city || '—'}</td>
-                            <td>{order.delivery_type || '—'}</td>
+                            <td>{order.city || (order.delivery_method && order.delivery_method.warehouse ? order.delivery_method.warehouse.split(',')[0] : '—')}</td>
+                            <td>{order.delivery_type || (order.delivery_method ? order.delivery_method.name : '—')}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1393,16 +1275,6 @@ const Dashboard: React.FC = () => {
                     )}
                   </Button>
                   
-                  <Button
-                    variant="outline-success"
-                    size="sm"
-                    onClick={exportYandexOrdersToCsv}
-                    disabled={selectedYmOrders.size === 0}
-                    className="me-2"
-                  >
-                    <i className="bi bi-file-earmark-excel me-1"></i> Экспорт в CSV
-                  </Button>
-                  
                   <Button 
                     variant="outline-primary" 
                     size="sm" 
@@ -1410,15 +1282,6 @@ const Dashboard: React.FC = () => {
                     className="me-2"
                   >
                     <i className="bi bi-arrow-repeat me-1"></i> Обновить
-                  </Button>
-                  
-                  <Button 
-                    variant="outline-warning" 
-                    size="sm" 
-                    onClick={debugLoadYandexOrders}
-                    title="Загрузить тестовые данные для отладки"
-                  >
-                    <i className="bi bi-bug me-1"></i> Тест
                   </Button>
                 </div>
                 
@@ -1436,13 +1299,6 @@ const Dashboard: React.FC = () => {
                   <Alert variant="info">
                     <i className="bi bi-info-circle me-2"></i>
                     Заказы не найдены
-                    <Button 
-                      variant="link" 
-                      className="ms-2" 
-                      onClick={debugLoadYandexOrders}
-                    >
-                      Загрузить тестовые данные
-                    </Button>
                   </Alert>
                 ) : (
                   <div className="table-responsive">
@@ -1464,6 +1320,9 @@ const Dashboard: React.FC = () => {
                           <th>Статус</th>
                           <th>Стоимость</th>
                           <th>Регион</th>
+                          <th>Способ доставки</th>
+                          <th>Клиент</th>
+                          <th>Адрес доставки</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1488,6 +1347,9 @@ const Dashboard: React.FC = () => {
                             </td>
                             <td>{formatPrice(order.price || order.total_price)}</td>
                             <td>{order.region || order.delivery_region || '—'}</td>
+                            <td>{order.delivery_type || order.delivery_service_name || '—'}</td>
+                            <td>{order.customer_name || '—'}</td>
+                            <td>{order.delivery_address || '—'}</td>
                           </tr>
                         ))}
                       </tbody>

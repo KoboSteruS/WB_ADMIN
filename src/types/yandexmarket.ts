@@ -3,20 +3,100 @@
  */
 
 /**
+ * Товар в заказе Яндекс Маркет
+ */
+export interface YandexMarketOrderItem {
+  id?: number;
+  offerId?: string;
+  offerName?: string;
+  price?: number;
+  buyerPrice?: number;
+  count?: number;
+  vat?: string;
+  shopSku?: string;
+  subsidy?: number;
+  promos?: any[];
+  subsidies?: any[];
+  [key: string]: any;
+}
+
+/**
+ * Информация о доставке
+ */
+export interface YandexMarketDelivery {
+  type?: string;
+  serviceName?: string;
+  price?: number;
+  dates?: {
+    fromDate?: string;
+    toDate?: string;
+    fromTime?: string;
+    toTime?: string;
+  };
+  region?: {
+    id?: number;
+    name?: string;
+    type?: string;
+  };
+  address?: {
+    country?: string;
+    postcode?: string;
+    city?: string;
+    street?: string;
+    house?: string;
+    gps?: {
+      latitude?: number;
+      longitude?: number;
+    };
+  };
+  outletCode?: string;
+  deliveryServiceId?: number;
+  [key: string]: any;
+}
+
+/**
+ * Покупатель
+ */
+export interface YandexMarketBuyer {
+  type?: string;
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  email?: string;
+  [key: string]: any;
+}
+
+/**
  * Заказ Яндекс Маркет
  */
 export interface YandexMarketOrder {
   id?: number;
   order_id?: string | number;
-  offer_id?: string;
-  shop_sku?: string;
-  market_sku?: string;
-  name?: string;
-  product_name?: string;
+  orderId?: string | number; // API возвращает orderId
   status?: string;
   substatus?: string;
-  created_at?: string;
-  created_date?: string;
+  creationDate?: string;
+  updatedAt?: string;
+  created_at?: string; // Для обратной совместимости
+  created_date?: string; // Для обратной совместимости
+  currency?: string;
+  itemsTotal?: number;
+  deliveryTotal?: number;
+  buyerTotal?: number;
+  buyerItemsTotal?: number;
+  paymentType?: string;
+  paymentMethod?: string;
+  fake?: boolean;
+  items?: YandexMarketOrderItem[];
+  delivery?: YandexMarketDelivery;
+  buyer?: YandexMarketBuyer;
+  
+  // Упрощенный доступ к часто используемым данным
+  // Эти поля могут быть заполнены из вложенных объектов для удобства использования
+  name?: string; // товар или первый товар из items
+  product_name?: string; // для совместимости
+  shop_sku?: string;
+  offer_id?: string;
   price?: string | number;
   total_price?: string | number;
   region?: string;
@@ -29,14 +109,9 @@ export interface YandexMarketOrder {
   customer_name?: string;
   customer_email?: string;
   customer_phone?: string;
-  shipment_date?: string;
-  items_count?: number;
-  tracking_number?: string;
-  payment_type?: string;
-  payment_method?: string;
-  notes?: string;
-  is_canceled?: boolean;
-  cancelation_reason?: string;
+  
+  // Дополнительные свойства
+  yandex_market_token?: number;
   [key: string]: any;
 }
 

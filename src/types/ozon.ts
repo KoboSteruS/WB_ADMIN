@@ -46,6 +46,58 @@ export interface OzonApiError {
 }
 
 /**
+ * Интерфейс товара в заказе Ozon
+ */
+export interface OzonOrderProduct {
+  price?: number;
+  offer_id?: string;
+  name?: string;
+  sku?: string | number;
+  quantity?: number;
+  mandatory_mark?: any;
+  currency_code?: string;
+  is_blr_traceable?: boolean;
+  [key: string]: any;
+}
+
+/**
+ * Интерфейс метода доставки Ozon
+ */
+export interface OzonDeliveryMethod {
+  id?: string | number;
+  name?: string;
+  warehouse_id?: string | number;
+  warehouse?: string;
+  tpl_provider_id?: number;
+  tpl_provider?: string;
+  [key: string]: any;
+}
+
+/**
+ * Интерфейс данных о клиенте Ozon
+ */
+export interface OzonCustomer {
+  name?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  [key: string]: any;
+}
+
+/**
+ * Интерфейс данных об отмене заказа Ozon
+ */
+export interface OzonCancellation {
+  cancel_reason_id?: number;
+  cancel_reason?: string;
+  cancellation_type?: string;
+  cancelled_after_ship?: boolean;
+  affect_cancellation_rating?: boolean;
+  cancellation_initiator?: string;
+  [key: string]: any;
+}
+
+/**
  * Типы для работы с API Ozon
  */
 
@@ -55,6 +107,8 @@ export interface OzonApiError {
 export interface OzonOrder {
   id?: number;
   order_id?: string | number;
+  order_number?: string;
+  posting_number?: string;
   product_id?: string | number;
   sku?: string | number;
   name?: string;
@@ -64,6 +118,9 @@ export interface OzonOrder {
   status?: string;
   created_at?: string;
   created_date?: string;
+  in_process_at?: string;
+  shipment_date?: string;
+  delivering_date?: string;
   delivery_type?: string;
   article?: string | number;
   quantity?: number;
@@ -72,15 +129,20 @@ export interface OzonOrder {
   tracking_number?: string;
   total_price?: string | number;
   total_discount?: string | number;
-  delivery_method?: string;
+  delivery_method?: OzonDeliveryMethod;
+  customer?: OzonCustomer;
   customer_name?: string;
   customer_email?: string;
   customer_phone?: string;
+  cancellation?: OzonCancellation;
   cancellation_reason?: string;
-  posting_number?: string;
   warehouse_id?: string | number;
   delivery_date?: string;
   is_premium?: boolean;
+  offer_id?: string;
+  products?: OzonOrderProduct[];
+  tpl_integration_type?: string;
+  ozon_token?: number;
   [key: string]: any;
 }
 

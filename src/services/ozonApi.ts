@@ -28,36 +28,87 @@ export const fetchOzonOrders = async (legalEntityId?: string): Promise<OzonOrder
   
   console.log('URL запроса Ozon:', apiUrl);
   
-  const response = await fetch(apiUrl, {
-    method: 'GET',
-    headers: {
-      'Authorization': API_TOKEN,
-      'Content-Type': 'application/json'
-    }
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Ошибка HTTP: ${response.status} ${response.statusText}. ${errorText}`);
-  }
-
-  const responseText = await response.text();
-  
   try {
-    const data = JSON.parse(responseText);
-    console.log('Данные JSON Ozon:', data);
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': API_TOKEN,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Ошибка HTTP: ${response.status} ${response.statusText}. ${errorText}`);
+    }
+
+    const responseData = await response.json();
+    console.log('Данные JSON Ozon:', responseData);
     
     // Проверяем наличие поля orders в ответе
-    const orders = data.orders || data;
+    const orders = responseData.orders || responseData;
     
     if (Array.isArray(orders)) {
-      return orders;
+      // Преобразуем и обогащаем данные заказов для удобства отображения в UI
+      const processedOrders = orders.map(order => {
+        // Создаем новый объект заказа с обработанными данными
+        const processedOrder: OzonOrder = {
+          ...order,
+          
+          // Преобразуем ID заказов
+          order_id: order.order_id || order.order_number,
+          
+          // Обрабатываем данные о товаре из массива products
+          product_name: order.products && order.products.length > 0 
+            ? order.products[0].name 
+            : order.name,
+          
+          sku: order.products && order.products.length > 0 
+            ? order.products[0].sku 
+            : order.sku,
+            
+          offer_id: order.products && order.products.length > 0 
+            ? order.products[0].offer_id 
+            : order.offer_id,
+            
+          // Обрабатываем данные о цене
+          price: order.products && order.products.length > 0 
+            ? order.products[0].price 
+            : order.price,
+          
+          // Обрабатываем метод доставки
+          delivery_type: order.delivery_method 
+            ? order.delivery_method.name 
+            : order.delivery_type,
+            
+          // Обрабатываем данные о складе
+          warehouse_id: order.delivery_method 
+            ? order.delivery_method.warehouse_id 
+            : order.warehouse_id,
+            
+          // Добавляем дополнительные данные из delivery_method
+          city: order.delivery_method && order.delivery_method.warehouse 
+            ? order.delivery_method.warehouse.split(',')[0] 
+            : order.city,
+          
+          // Информация о трекинге
+          tracking_number: order.tracking_number || order.posting_number,
+          
+          // Обрабатываем даты
+          created_at: order.in_process_at || order.created_at,
+          created_date: order.shipment_date || order.created_date
+        };
+        
+        return processedOrder;
+      });
+      
+      return processedOrders;
     } else {
       throw new Error('Неверный формат данных от сервера. Массив заказов не найден.');
     }
-  } catch (err) {
-    console.error('Ошибка парсинга JSON:', err);
-    throw new Error('Ошибка парсинга ответа сервера. Сервер вернул некорректный JSON.');
+  } catch (error) {
+    console.error('Ошибка при получении данных Ozon:', error);
+    throw new Error('Ошибка при загрузке заказов Ozon. Подробности в консоли.');
   }
 };
 

@@ -8,7 +8,26 @@
 export const getBadgeColor = (status?: string): string => {
   if (!status) return 'secondary';
   
-  switch (status.toLowerCase()) {
+  const statusUpper = status.toUpperCase();
+  const statusLower = status.toLowerCase();
+  
+  // Статусы Яндекс Маркет в верхнем регистре
+  if (statusUpper === 'PROCESSING') {
+    return 'warning';
+  } else if (statusUpper === 'CANCELLED') {
+    return 'danger';
+  } else if (statusUpper === 'DELIVERED') {
+    return 'success';
+  } else if (statusUpper === 'SHIPPED') {
+    return 'info';
+  } else if (statusUpper === 'PICKUP') {
+    return 'primary';
+  } else if (statusUpper === 'DELIVERY') {
+    return 'primary';
+  }
+  
+  // Стандартные статусы в нижнем регистре
+  switch (statusLower) {
     case 'new':
       return 'primary';
     case 'confirmed':
@@ -16,6 +35,7 @@ export const getBadgeColor = (status?: string): string => {
     case 'assembly':
     case 'assembled':
     case 'ready_to_shipment':
+    case 'ready_to_ship':
       return 'warning';
     case 'sent':
     case 'shipped':
@@ -36,7 +56,30 @@ export const getBadgeColor = (status?: string): string => {
 export const getStatusText = (status?: string): string => {
   if (!status) return '—';
   
-  switch (status.toLowerCase()) {
+  const statusUpper = status.toUpperCase();
+  const statusLower = status.toLowerCase();
+  
+  // Статусы Яндекс Маркет в верхнем регистре
+  if (statusUpper === 'PROCESSING') {
+    return 'Обработка';
+  } else if (statusUpper === 'CANCELLED') {
+    return 'Отменен';
+  } else if (statusUpper === 'DELIVERED') {
+    return 'Доставлен';
+  } else if (statusUpper === 'SHIPPED') {
+    return 'Отправлен';
+  } else if (statusUpper === 'PICKUP') {
+    return 'Самовывоз';
+  } else if (statusUpper === 'DELIVERY') {
+    return 'Доставка';
+  } else if (statusUpper === 'STARTED') {
+    return 'Начат';
+  } else if (statusUpper === 'READY_TO_SHIP') {
+    return 'Готов к отправке';
+  }
+  
+  // Стандартные статусы в нижнем регистре
+  switch (statusLower) {
     case 'new':
       return 'Новый';
     case 'confirmed':
@@ -46,6 +89,7 @@ export const getStatusText = (status?: string): string => {
     case 'assembled':
       return 'Собран';
     case 'ready_to_shipment':
+    case 'ready_to_ship':
       return 'Готов к отправке';
     case 'sent':
     case 'shipped':
