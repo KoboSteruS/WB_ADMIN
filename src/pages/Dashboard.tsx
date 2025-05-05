@@ -1,8 +1,41 @@
 import React, { useEffect, useState } from 'react';
-import { Container, Row, Col, Alert, Table, Button } from 'react-bootstrap';
+import { Container, Row, Col, Alert, Table, Button, Card } from 'react-bootstrap';
 import Spinner from 'react-bootstrap/Spinner';
 import { useNavigate } from 'react-router-dom';
 import './Dashboard.css';
+import Badge from 'react-bootstrap/Badge';
+import Form from 'react-bootstrap/Form';
+
+// Импорт компонентов и хуков для работы с заказами маркетплейсов
+import { WbOrder } from '../types/wildberries';
+import { OzonOrder } from '../types/ozon';
+import { YandexMarketOrder } from '../types/yandexmarket';
+import { 
+  fetchWbOrders, 
+  changeOrderStatus as changeWbOrderStatus, 
+  addWbToken, 
+  requestShipping 
+} from '../services/wildberriesApi';
+import { 
+  fetchOzonOrders, 
+  changeOrderStatus as changeOzonOrderStatus, 
+  addOzonToken 
+} from '../services/ozonApi';
+import { 
+  fetchYandexMarketOrders, 
+  changeOrderStatus as changeYandexOrderStatus, 
+  addYandexMarketToken 
+} from '../services/yandexMarketApi';
+import { formatDate, formatPrice } from '../utils/orderUtils';
+import { getBadgeColor, getStatusText } from '../utils/statusHelpers';
+
+// Импортируем сервис генерации PDF
+import { 
+  generateOrdersPDF, 
+  generateArticlesSummaryPDF, 
+  generateOrdersListPDF, 
+  generateStickersPDF 
+} from '../services/pdfGenerationService';
 
 /**
  * Интерфейс для юридического лица
@@ -18,6 +51,36 @@ const Dashboard: React.FC = () => {
   const [legalEntities, setLegalEntities] = useState<LegalEntity[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Состояния для работы с заказами маркетплейсов
+  const [selectedMarketplace, setSelectedMarketplace] = useState<string | null>(null);
+  const [selectedLegalEntity, setSelectedLegalEntity] = useState<LegalEntity | null>(null);
+  
+  // Состояния для Wildberries
+  const [wbOrders, setWbOrders] = useState<WbOrder[]>([]);
+  const [wbOrdersLoading, setWbOrdersLoading] = useState<boolean>(false);
+  const [wbOrdersError, setWbOrdersError] = useState<string | null>(null);
+  const [selectedWbOrders, setSelectedWbOrders] = useState<Set<number | string>>(new Set());
+  const [selectAllWb, setSelectAllWb] = useState<boolean>(false);
+  
+  // Состояния для Ozon
+  const [ozonOrders, setOzonOrders] = useState<OzonOrder[]>([]);
+  const [ozonOrdersLoading, setOzonOrdersLoading] = useState<boolean>(false);
+  const [ozonOrdersError, setOzonOrdersError] = useState<string | null>(null);
+  const [selectedOzonOrders, setSelectedOzonOrders] = useState<Set<number | string>>(new Set());
+  const [selectAllOzon, setSelectAllOzon] = useState<boolean>(false);
+  
+  // Состояния для Yandex Market
+  const [ymOrders, setYmOrders] = useState<YandexMarketOrder[]>([]);
+  const [ymOrdersLoading, setYmOrdersLoading] = useState<boolean>(false);
+  const [ymOrdersError, setYmOrdersError] = useState<string | null>(null);
+  const [selectedYmOrders, setSelectedYmOrders] = useState<Set<number | string>>(new Set());
+  const [selectAllYm, setSelectAllYm] = useState<boolean>(false);
+
+  // Состояния для обработки статусов
+  const [statusChangeLoading, setStatusChangeLoading] = useState<boolean>(false);
+  const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
+  const [statusChangeSuccess, setStatusChangeSuccess] = useState<boolean>(false);
 
   /**
    * Загрузка списка юридических лиц с сервера
@@ -57,42 +120,174 @@ const Dashboard: React.FC = () => {
   }, []);
 
   /**
-   * Переход на страницу заказов WB для выбранного юр. лица
-   * @param entity - юридическое лицо
+   * Загрузка заказов Wildberries для выбранного юр. лица
    */
-  const handleViewWbOrders = (entity: LegalEntity) => {
-    // Сохраняем ID и данные юр. лица в localStorage для использования на странице заказов
-    localStorage.setItem('selectedLegalEntityId', entity.id);
-    localStorage.setItem('selectedLegalEntityData', JSON.stringify(entity));
+  const loadWildberriesOrders = async (entity: LegalEntity) => {
+    if (!entity || !entity.id) return;
     
-    // Переходим на страницу заказов WB
-    navigate('/marketplace-settings/wildberries/orders');
+    setWbOrdersLoading(true);
+    setWbOrdersError(null);
+    setSelectedLegalEntity(entity);
+    
+    try {
+      const ordersData = await fetchWbOrders(entity.id);
+      setWbOrders(ordersData);
+    } catch (error) {
+      console.error('Ошибка при загрузке заказов Wildberries:', error);
+      if (error instanceof Error) {
+        setWbOrdersError(error.message);
+      } else {
+        setWbOrdersError('Произошла неизвестная ошибка при загрузке заказов');
+      }
+    } finally {
+      setWbOrdersLoading(false);
+    }
+  };
+  
+  /**
+   * Загрузка заказов Ozon для выбранного юр. лица
+   */
+  const loadOzonOrders = async (entity: LegalEntity) => {
+    if (!entity || !entity.id) return;
+    
+    setOzonOrdersLoading(true);
+    setOzonOrdersError(null);
+    setSelectedLegalEntity(entity);
+    
+    try {
+      const ordersData = await fetchOzonOrders(entity.id);
+      setOzonOrders(ordersData);
+    } catch (error) {
+      console.error('Ошибка при загрузке заказов Ozon:', error);
+      if (error instanceof Error) {
+        setOzonOrdersError(error.message);
+      } else {
+        setOzonOrdersError('Произошла неизвестная ошибка при загрузке заказов');
+      }
+    } finally {
+      setOzonOrdersLoading(false);
+    }
+  };
+  
+  /**
+   * Загрузка заказов Yandex Market для выбранного юр. лица
+   */
+  const loadYandexMarketOrders = async (entity: LegalEntity) => {
+    if (!entity || !entity.id) return;
+    
+    setYmOrdersLoading(true);
+    setYmOrdersError(null);
+    setSelectedLegalEntity(entity);
+    
+    try {
+      const ordersData = await fetchYandexMarketOrders(entity.id);
+      setYmOrders(ordersData);
+    } catch (error) {
+      console.error('Ошибка при загрузке заказов Яндекс Маркет:', error);
+      if (error instanceof Error) {
+        setYmOrdersError(error.message);
+      } else {
+        setYmOrdersError('Произошла неизвестная ошибка при загрузке заказов');
+      }
+    } finally {
+      setYmOrdersLoading(false);
+    }
   };
 
   /**
-   * Переход на страницу заказов Яндекс Маркета для выбранного юр. лица
-   * @param entity - юридическое лицо
+   * Обработчик выбора маркетплейса для юр. лица
    */
-  const handleViewYandexMarketOrders = (entity: LegalEntity) => {
-    // Сохраняем ID и данные юр. лица в localStorage для использования на странице заказов
+  const handleSelectMarketplace = (marketplace: string, entity: LegalEntity) => {
+    // Сохраняем ID и данные юр. лица в localStorage для использования в других компонентах
     localStorage.setItem('selectedLegalEntityId', entity.id);
     localStorage.setItem('selectedLegalEntityData', JSON.stringify(entity));
     
-    // Переходим на страницу заказов Яндекс Маркета
-    navigate('/marketplace-settings/yandex-market/orders');
+    // Устанавливаем выбранный маркетплейс
+    setSelectedMarketplace(marketplace);
+    
+    // Загружаем заказы выбранного маркетплейса
+    if (marketplace === 'wildberries') {
+      loadWildberriesOrders(entity);
+    } else if (marketplace === 'ozon') {
+      loadOzonOrders(entity);
+    } else if (marketplace === 'yandex-market') {
+      loadYandexMarketOrders(entity);
+    }
   };
 
   /**
-   * Переход на страницу заказов Ozon для выбранного юр. лица
-   * @param entity - юридическое лицо
+   * Обработчики выбора заказов Wildberries
    */
-  const handleViewOzonOrders = (entity: LegalEntity) => {
-    // Сохраняем ID и данные юр. лица в localStorage для использования на странице заказов
-    localStorage.setItem('selectedLegalEntityId', entity.id);
-    localStorage.setItem('selectedLegalEntityData', JSON.stringify(entity));
-    
-    // Переходим на страницу заказов Ozon
-    navigate('/marketplace-settings/ozon/orders');
+  const handleSelectWbOrder = (orderId: number | string) => {
+    setSelectedWbOrders(prevSelected => {
+      const newSelected = new Set(prevSelected);
+      if (newSelected.has(orderId)) {
+        newSelected.delete(orderId);
+      } else {
+        newSelected.add(orderId);
+      }
+      return newSelected;
+    });
+  };
+
+  const handleSelectAllWb = () => {
+    if (selectAllWb) {
+      setSelectedWbOrders(new Set());
+    } else {
+      const allOrderIds = wbOrders.map(order => order.id || order.order_id || '');
+      setSelectedWbOrders(new Set(allOrderIds));
+    }
+    setSelectAllWb(!selectAllWb);
+  };
+  
+  /**
+   * Обработчики выбора заказов Ozon
+   */
+  const handleSelectOzonOrder = (orderId: number | string) => {
+    setSelectedOzonOrders(prevSelected => {
+      const newSelected = new Set(prevSelected);
+      if (newSelected.has(orderId)) {
+        newSelected.delete(orderId);
+      } else {
+        newSelected.add(orderId);
+      }
+      return newSelected;
+    });
+  };
+
+  const handleSelectAllOzon = () => {
+    if (selectAllOzon) {
+      setSelectedOzonOrders(new Set());
+    } else {
+      const allOrderIds = ozonOrders.map(order => order.id || order.order_id || '');
+      setSelectedOzonOrders(new Set(allOrderIds));
+    }
+    setSelectAllOzon(!selectAllOzon);
+  };
+  
+  /**
+   * Обработчики выбора заказов Яндекс Маркет
+   */
+  const handleSelectYmOrder = (orderId: number | string) => {
+    setSelectedYmOrders(prevSelected => {
+      const newSelected = new Set(prevSelected);
+      if (newSelected.has(orderId)) {
+        newSelected.delete(orderId);
+      } else {
+        newSelected.add(orderId);
+      }
+      return newSelected;
+    });
+  };
+
+  const handleSelectAllYm = () => {
+    if (selectAllYm) {
+      setSelectedYmOrders(new Set());
+    } else {
+      const allOrderIds = ymOrders.map(order => order.id || order.order_id || '');
+      setSelectedYmOrders(new Set(allOrderIds));
+    }
+    setSelectAllYm(!selectAllYm);
   };
 
   /**
@@ -100,6 +295,610 @@ const Dashboard: React.FC = () => {
    */
   const handleManageLegalEntities = () => {
     navigate('/legal-entities');
+  };
+
+  /**
+   * Очистка выбранного маркетплейса
+   */
+  const handleClearSelectedMarketplace = () => {
+    setSelectedMarketplace(null);
+    setSelectedWbOrders(new Set());
+    setSelectAllWb(false);
+    setSelectedOzonOrders(new Set());
+    setSelectAllOzon(false);
+    setSelectedYmOrders(new Set());
+    setSelectAllYm(false);
+  };
+
+  /**
+   * Получает следующий статус для заказов Wildberries
+   */
+  const getNextWbStatus = (currentStatus: string): string => {
+    switch (currentStatus.toLowerCase()) {
+      case 'new':
+        return 'assembly';
+      case 'assembly':
+        return 'ready_to_shipment';
+      case 'ready_to_shipment':
+        return 'shipped';
+      default:
+        return 'new';
+    }
+  };
+  
+  /**
+   * Получает текущий статус выбранных заказов Wildberries
+   */
+  const getSelectedWbOrdersStatus = (): string => {
+    if (selectedWbOrders.size === 0) return 'new';
+    
+    // Создаем множество уникальных статусов
+    const statuses = new Set<string>();
+    
+    // Заполняем множество статусами всех выбранных заказов
+    wbOrders.forEach(order => {
+      if (selectedWbOrders.has(order.id || order.order_id || '')) {
+        statuses.add((order.wb_status || order.own_status || 'new').toLowerCase());
+      }
+    });
+    
+    // Если все заказы имеют один и тот же статус, возвращаем его
+    if (statuses.size === 1) {
+      return Array.from(statuses)[0];
+    }
+    
+    // Если статусы разные, возвращаем смешанный статус
+    return 'mixed';
+  };
+  
+  /**
+   * Получает текст для кнопки смены статуса Wildberries
+   */
+  const getWbStatusButtonText = (status: string): string => {
+    switch (status.toLowerCase()) {
+      case 'new':
+        return 'Начать сборку';
+      case 'assembly':
+        return 'Завершить сборку';
+      case 'ready_to_shipment':
+        return 'Отгрузить';
+      case 'shipped':
+        return 'Отгружено';
+      case 'mixed':
+        return 'Обработать заказы';
+      default:
+        return 'Сменить статус';
+    }
+  };
+  
+  /**
+   * Получает данные выбранных заказов Wildberries
+   */
+  const getSelectedWbOrdersData = (): WbOrder[] => {
+    return wbOrders.filter(order => 
+      selectedWbOrders.has(order.id || order.order_id || '')
+    );
+  };
+  
+  /**
+   * Обработчик смены статуса заказов Wildberries
+   */
+  const handleChangeWbOrderStatus = async () => {
+    if (selectedWbOrders.size === 0) {
+      setStatusChangeError('Выберите хотя бы один заказ');
+      return;
+    }
+
+    // Определяем текущий статус выбранных заказов
+    const currentStatus = getSelectedWbOrdersStatus();
+    // Определяем следующий статус
+    const nextStatus = getNextWbStatus(currentStatus);
+
+    setStatusChangeLoading(true);
+    setStatusChangeError(null);
+    setStatusChangeSuccess(false);
+
+    try {
+      // Получаем ID заказов
+      const orderIds = Array.from(selectedWbOrders).map(orderId => {
+        const order = wbOrders.find(o => 
+          (o.id || o.order_id) === orderId
+        );
+        return order?.order_id || orderId;
+      });
+
+      // Отправляем запрос на изменение статуса через API-сервис
+      await changeWbOrderStatus({
+        orders: orderIds,
+        status: nextStatus
+      });
+
+      setStatusChangeSuccess(true);
+        
+      // Если переходим в статус "assembly", скачиваем PDF-файлы
+      if (nextStatus === 'assembly') {
+        downloadWbOrderPDFs();
+      }
+        
+      // Обновляем данные заказов
+      setTimeout(() => {
+        if (selectedLegalEntity) {
+          loadWildberriesOrders(selectedLegalEntity);
+        }
+      }, 1500);
+    } catch (error) {
+      console.error('Ошибка запроса:', error);
+      setStatusChangeError('Произошла ошибка при отправке запроса');
+    } finally {
+      setStatusChangeLoading(false);
+    }
+  };
+  
+  /**
+   * Скачивание PDF-файлов с данными заказов Wildberries
+   */
+  const downloadWbOrderPDFs = () => {
+    const selectedOrdersData = getSelectedWbOrdersData();
+    
+    if (selectedOrdersData.length === 0) {
+      alert('Выберите хотя бы один заказ');
+      return;
+    }
+    
+    // Сортируем выбранные заказы по nm_id для единообразия
+    const sortedByNmId = [...selectedOrdersData].sort((a, b) => {
+      const nmIdA = a.nm_id?.toString().toLowerCase() || '';
+      const nmIdB = b.nm_id?.toString().toLowerCase() || '';
+      return nmIdA.localeCompare(nmIdB);
+    });
+    
+    // Генерируем PDF с выбранными заказами через сервис
+    generateOrdersPDF(sortedByNmId, selectedLegalEntity || undefined);
+  };
+  
+  /**
+   * Обработчик запроса на доставку для Wildberries
+   */
+  const handleWbShippingRequest = async () => {
+    if (selectedWbOrders.size === 0) {
+      alert('Выберите хотя бы один заказ для запроса на доставку');
+      return;
+    }
+
+    // Получаем выбранные заказы
+    const selectedOrdersData = getSelectedWbOrdersData();
+    
+    if (selectedOrdersData.length === 0) {
+      alert('Не удалось получить данные выбранных заказов');
+      return;
+    }
+    
+    // Проверяем наличие supply_id в заказах
+    const ordersWithSupplyId = selectedOrdersData.filter(order => order.supply_id);
+    if (ordersWithSupplyId.length === 0) {
+      alert('У выбранных заказов отсутствует идентификатор поставки (supply_id)');
+      return;
+    }
+    
+    // Получаем уникальные идентификаторы поставок
+    const supplyIdMap: {[key: string]: boolean} = {};
+    ordersWithSupplyId.forEach(order => {
+      if (order.supply_id) {
+        supplyIdMap[order.supply_id] = true;
+      }
+    });
+    const supplyIds = Object.keys(supplyIdMap);
+    
+    // Получаем wb_token_id из первого заказа (предполагаем, что все заказы имеют одинаковый токен)
+    const wb_token_id = ordersWithSupplyId[0].wb_token || 1;
+    
+    try {
+      // Показываем индикатор загрузки
+      setStatusChangeLoading(true);
+      
+      // Отправляем запрос через API-сервис
+      await requestShipping(supplyIds, wb_token_id);
+      
+      setStatusChangeSuccess(true);
+      alert(`Запрос на доставку успешно отправлен для ${supplyIds.length} поставок`);
+        
+      // Обновляем данные заказов
+      setTimeout(() => {
+        if (selectedLegalEntity) {
+          loadWildberriesOrders(selectedLegalEntity);
+        }
+      }, 1500);
+    } catch (error) {
+      console.error('Ошибка запроса:', error);
+      alert(`Произошла ошибка при отправке запроса: ${error instanceof Error ? error.message : String(error)}`);
+      setStatusChangeError('Произошла ошибка при отправке запроса');
+    } finally {
+      setStatusChangeLoading(false);
+    }
+  };
+
+  /**
+   * Получает следующий статус для заказов Ozon
+   */
+  const getNextOzonStatus = (currentStatus: string): string => {
+    switch (currentStatus.toLowerCase()) {
+      case 'new':
+        return 'processing';
+      case 'processing':
+        return 'ready_to_ship';
+      case 'ready_to_ship':
+        return 'shipped';
+      default:
+        return 'new';
+    }
+  };
+
+  /**
+   * Получает текущий статус выбранных заказов Ozon
+   */
+  const getSelectedOzonOrdersStatus = (): string => {
+    if (selectedOzonOrders.size === 0) return 'new';
+    
+    // Создаем множество уникальных статусов
+    const statuses = new Set<string>();
+    
+    // Заполняем множество статусами всех выбранных заказов
+    ozonOrders.forEach(order => {
+      if (selectedOzonOrders.has(order.id || order.order_id || '')) {
+        statuses.add((order.status || 'new').toLowerCase());
+      }
+    });
+    
+    // Если все заказы имеют один и тот же статус, возвращаем его
+    if (statuses.size === 1) {
+      return Array.from(statuses)[0];
+    }
+    
+    // Если статусы разные, возвращаем смешанный статус
+    return 'mixed';
+  };
+
+  /**
+   * Получает текст для кнопки смены статуса Ozon
+   */
+  const getOzonStatusButtonText = (status: string): string => {
+    switch (status.toLowerCase()) {
+      case 'new':
+        return 'Начать обработку';
+      case 'processing':
+        return 'Подготовить к отправке';
+      case 'ready_to_ship':
+        return 'Отправить';
+      case 'shipped':
+        return 'Отправлено';
+      case 'mixed':
+        return 'Обработать заказы';
+      default:
+        return 'Сменить статус';
+    }
+  };
+
+  /**
+   * Получает данные выбранных заказов Ozon
+   */
+  const getSelectedOzonOrdersData = (): OzonOrder[] => {
+    return ozonOrders.filter(order => 
+      selectedOzonOrders.has(order.id || order.order_id || '')
+    );
+  };
+
+  /**
+   * Обработчик смены статуса заказов Ozon
+   */
+  const handleChangeOzonOrderStatus = async () => {
+    if (selectedOzonOrders.size === 0) {
+      setStatusChangeError('Выберите хотя бы один заказ');
+      return;
+    }
+
+    // Определяем текущий статус выбранных заказов
+    const currentStatus = getSelectedOzonOrdersStatus();
+    // Определяем следующий статус
+    const nextStatus = getNextOzonStatus(currentStatus);
+
+    setStatusChangeLoading(true);
+    setStatusChangeError(null);
+    setStatusChangeSuccess(false);
+
+    try {
+      // Получаем ID заказов
+      const orderIds = Array.from(selectedOzonOrders).map(orderId => {
+        const order = ozonOrders.find(o => 
+          (o.id || o.order_id) === orderId
+        );
+        return order?.order_id || orderId;
+      });
+
+      // Отправляем запрос на изменение статуса через API-сервис
+      await changeOzonOrderStatus({
+        orders: orderIds,
+        status: nextStatus
+      });
+
+      setStatusChangeSuccess(true);
+        
+      // Обновляем данные заказов
+      setTimeout(() => {
+        if (selectedLegalEntity) {
+          loadOzonOrders(selectedLegalEntity);
+        }
+      }, 1500);
+    } catch (error) {
+      console.error('Ошибка запроса:', error);
+      setStatusChangeError('Произошла ошибка при отправке запроса');
+    } finally {
+      setStatusChangeLoading(false);
+    }
+  };
+
+  /**
+   * Экспорт заказов Ozon в CSV
+   */
+  const exportOzonOrdersToCsv = () => {
+    const selectedOrdersData = getSelectedOzonOrdersData();
+    
+    if (selectedOrdersData.length === 0) {
+      alert('Выберите хотя бы один заказ для экспорта');
+      return;
+    }
+    
+    // Заголовки CSV
+    const headers = ['ID заказа', 'Дата создания', 'Название товара', 'Артикул', 'Статус', 'Цена продажи', 'Город', 'Способ доставки'];
+    
+    // Формируем строки данных
+    const rows = selectedOrdersData.map(order => [
+      order.order_id || '',
+      order.created_at || order.created_date || '',
+      order.product_name || order.name || '',
+      order.sku || order.article || '',
+      order.status || '',
+      order.price || order.sale_price || '',
+      order.city || '',
+      order.delivery_type || ''
+    ]);
+    
+    // Объединяем заголовки и строки
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+    
+    // Создаем Blob
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    
+    // Создаем ссылку для скачивания
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    // Настраиваем и запускаем скачивание
+    link.setAttribute('href', url);
+    link.setAttribute('download', `ozon_orders_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  /**
+   * Получает следующий статус для заказов Яндекс Маркет
+   */
+  const getNextYandexStatus = (currentStatus: string): string => {
+    switch (currentStatus.toLowerCase()) {
+      case 'new':
+        return 'processing';
+      case 'processing':
+        return 'ready_to_ship';
+      case 'ready_to_ship':
+        return 'shipped';
+      default:
+        return 'new';
+    }
+  };
+
+  /**
+   * Получает текущий статус выбранных заказов Яндекс Маркет
+   */
+  const getSelectedYandexOrdersStatus = (): string => {
+    if (selectedYmOrders.size === 0) return 'new';
+    
+    // Создаем множество уникальных статусов
+    const statuses = new Set<string>();
+    
+    // Заполняем множество статусами всех выбранных заказов
+    ymOrders.forEach(order => {
+      if (selectedYmOrders.has(order.id || order.order_id || '')) {
+        statuses.add((order.status || 'new').toLowerCase());
+      }
+    });
+    
+    // Если все заказы имеют один и тот же статус, возвращаем его
+    if (statuses.size === 1) {
+      return Array.from(statuses)[0];
+    }
+    
+    // Если статусы разные, возвращаем смешанный статус
+    return 'mixed';
+  };
+
+  /**
+   * Получает текст для кнопки смены статуса Яндекс Маркет
+   */
+  const getYandexStatusButtonText = (status: string): string => {
+    switch (status.toLowerCase()) {
+      case 'new':
+        return 'Начать обработку';
+      case 'processing':
+        return 'Подготовить к отправке';
+      case 'ready_to_ship':
+        return 'Отправить';
+      case 'shipped':
+        return 'Отправлено';
+      case 'mixed':
+        return 'Обработать заказы';
+      default:
+        return 'Сменить статус';
+    }
+  };
+
+  /**
+   * Получает данные выбранных заказов Яндекс Маркет
+   */
+  const getSelectedYandexOrdersData = (): YandexMarketOrder[] => {
+    return ymOrders.filter(order => 
+      selectedYmOrders.has(order.id || order.order_id || '')
+    );
+  };
+
+  /**
+   * Обработчик смены статуса заказов Яндекс Маркет
+   */
+  const handleChangeYandexOrderStatus = async () => {
+    if (selectedYmOrders.size === 0) {
+      setStatusChangeError('Выберите хотя бы один заказ');
+      return;
+    }
+
+    // Определяем текущий статус выбранных заказов
+    const currentStatus = getSelectedYandexOrdersStatus();
+    // Определяем следующий статус
+    const nextStatus = getNextYandexStatus(currentStatus);
+
+    setStatusChangeLoading(true);
+    setStatusChangeError(null);
+    setStatusChangeSuccess(false);
+
+    try {
+      // Получаем ID заказов
+      const orderIds = Array.from(selectedYmOrders).map(orderId => {
+        const order = ymOrders.find(o => 
+          (o.id || o.order_id) === orderId
+        );
+        return order?.order_id || orderId;
+      });
+
+      // Отправляем запрос на изменение статуса через API-сервис
+      await changeYandexOrderStatus({
+        orders: orderIds,
+        status: nextStatus
+      });
+
+      setStatusChangeSuccess(true);
+        
+      // Обновляем данные заказов
+      setTimeout(() => {
+        if (selectedLegalEntity) {
+          loadYandexMarketOrders(selectedLegalEntity);
+        }
+      }, 1500);
+    } catch (error) {
+      console.error('Ошибка запроса:', error);
+      setStatusChangeError('Произошла ошибка при отправке запроса');
+    } finally {
+      setStatusChangeLoading(false);
+    }
+  };
+
+  /**
+   * Экспорт заказов Яндекс Маркет в CSV
+   */
+  const exportYandexOrdersToCsv = () => {
+    const selectedOrdersData = getSelectedYandexOrdersData();
+    
+    if (selectedOrdersData.length === 0) {
+      alert('Выберите хотя бы один заказ для экспорта');
+      return;
+    }
+    
+    // Заголовки CSV
+    const headers = ['ID заказа', 'Дата создания', 'Название товара', 'Код товара', 'Статус', 'Стоимость', 'Регион', 'Тип доставки'];
+    
+    // Формируем строки данных
+    const rows = selectedOrdersData.map(order => [
+      order.order_id || '',
+      order.created_at || order.created_date || '',
+      order.name || order.product_name || '',
+      order.shop_sku || order.offer_id || '',
+      order.status || '',
+      order.price || order.total_price || '',
+      order.region || order.delivery_region || '',
+      order.delivery_type || ''
+    ]);
+    
+    // Объединяем заголовки и строки
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+    
+    // Создаем Blob
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    
+    // Создаем ссылку для скачивания
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    // Настраиваем и запускаем скачивание
+    link.setAttribute('href', url);
+    link.setAttribute('download', `yandex_market_orders_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Дебаг-функция для проверки загрузки заказов Яндекс Маркета
+  const debugLoadYandexOrders = async () => {
+    if (!selectedLegalEntity) {
+      setYmOrdersError("Не выбрано юридическое лицо");
+      return;
+    }
+    
+    console.log("Отладка загрузки заказов Яндекс.Маркет");
+    console.log("Юр. лицо:", selectedLegalEntity);
+
+    setYmOrdersLoading(true);
+    setYmOrdersError(null);
+    
+    try {
+      // Тестовые данные для отладки
+      const testOrders: YandexMarketOrder[] = [
+        {
+          id: 1,
+          order_id: 'YM-12345',
+          created_at: new Date().toISOString(),
+          name: 'Тестовый товар Яндекс',
+          shop_sku: 'YM-SKU-001',
+          status: 'new',
+          price: 2500,
+          region: 'Москва',
+          delivery_type: 'Курьер'
+        },
+        {
+          id: 2,
+          order_id: 'YM-12346',
+          created_at: new Date().toISOString(),
+          name: 'Тестовый товар 2 Яндекс',
+          shop_sku: 'YM-SKU-002',
+          status: 'processing',
+          price: 3500,
+          region: 'Санкт-Петербург',
+          delivery_type: 'Пункт выдачи'
+        }
+      ];
+      
+      console.log("Установка тестовых данных:", testOrders);
+      setYmOrders(testOrders);
+    } catch (error) {
+      console.error('Ошибка при загрузке тестовых заказов:', error);
+      setYmOrdersError('Ошибка при загрузке тестовых заказов');
+    } finally {
+      setYmOrdersLoading(false);
+    }
   };
 
   return (
@@ -110,7 +909,6 @@ const Dashboard: React.FC = () => {
           <p className="text-muted">Обзор ваших маркетплейсов и продаж</p>
         </Col>
       </Row>
-
 
       <Row className="mb-4">
         <Col>
@@ -159,7 +957,7 @@ const Dashboard: React.FC = () => {
                       <Button 
                         variant="primary" 
                         size="sm"
-                        onClick={() => handleViewWbOrders(entity)}
+                        onClick={() => handleSelectMarketplace('wildberries', entity)}
                         style={{ backgroundColor: 'purple', border: '2px solid purple'}}
                       >
                         <i className="bi bi-box me-1"></i>
@@ -168,7 +966,7 @@ const Dashboard: React.FC = () => {
                         <Button 
                           variant="primary" 
                           size="sm"
-                          onClick={() => handleViewOzonOrders(entity)}
+                          onClick={() => handleSelectMarketplace('ozon', entity)}
                         >
                           <i className="bi bi-box-arrow-right me-1"></i>
                           OZON
@@ -176,7 +974,7 @@ const Dashboard: React.FC = () => {
                         <Button 
                           variant="warning" 
                           size="sm"
-                          onClick={() => handleViewYandexMarketOrders(entity)}
+                          onClick={() => handleSelectMarketplace('yandex-market', entity)}
                         >
                           <i className="bi bi-box-seam me-1"></i>
                           YandexMarket
@@ -190,6 +988,517 @@ const Dashboard: React.FC = () => {
           )}
         </Col>
       </Row>
+
+      {/* Отображение заказов Wildberries */}
+      {selectedMarketplace === 'wildberries' && selectedLegalEntity && (
+        <Row className="mt-4">
+          <Col>
+            <Card>
+              <Card.Header className="d-flex justify-content-between align-items-center">
+                <div>
+                  <h3 className="mb-0">Заказы Wildberries</h3>
+                  <p className="text-muted mb-0">
+                    Юридическое лицо: <strong>{selectedLegalEntity.title}</strong> (ИНН: {selectedLegalEntity.inn})
+                  </p>
+                </div>
+                <div>
+                  <Button 
+                    variant="outline-secondary" 
+                    size="sm" 
+                    onClick={handleClearSelectedMarketplace}
+                  >
+                    <i className="bi bi-x-circle me-1"></i>Скрыть
+                  </Button>
+                </div>
+              </Card.Header>
+              <Card.Body>
+                {statusChangeError && (
+                  <Alert variant="danger" className="mb-3" dismissible onClose={() => setStatusChangeError(null)}>
+                    <i className="bi bi-exclamation-triangle me-2"></i>
+                    {statusChangeError}
+                  </Alert>
+                )}
+                
+                {statusChangeSuccess && (
+                  <Alert variant="success" className="mb-3" dismissible onClose={() => setStatusChangeSuccess(false)}>
+                    <i className="bi bi-check-circle me-2"></i>
+                    Действие успешно выполнено
+                  </Alert>
+                )}
+                
+                <div className="mb-3">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleChangeWbOrderStatus}
+                    disabled={selectedWbOrders.size === 0 || statusChangeLoading}
+                    className="me-2"
+                  >
+                    {statusChangeLoading ? (
+                      <>
+                        <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
+                        Обработка...
+                      </>
+                    ) : (
+                      <>
+                        <i className="bi bi-arrow-right-circle me-2"></i>
+                        {getWbStatusButtonText(getSelectedWbOrdersStatus())} ({selectedWbOrders.size})
+                      </>
+                    )}
+                  </Button>
+                  
+                  {getSelectedWbOrdersStatus() === 'ready_to_shipment' && (
+                    <Button
+                      variant="success"
+                      size="sm"
+                      onClick={handleWbShippingRequest}
+                      disabled={selectedWbOrders.size === 0 || statusChangeLoading}
+                      className="me-2"
+                    >
+                      {statusChangeLoading ? (
+                        <>
+                          <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
+                          Отправка запроса...
+                        </>
+                      ) : (
+                        <>
+                          <i className="bi bi-truck me-2"></i>
+                          Запрос на доставку ({selectedWbOrders.size})
+                        </>
+                      )}
+                    </Button>
+                  )}
+                  
+                  <Button
+                    variant="outline-success"
+                    size="sm"
+                    onClick={downloadWbOrderPDFs}
+                    disabled={selectedWbOrders.size === 0}
+                    className="me-2"
+                  >
+                    <i className="bi bi-file-pdf me-1"></i> Скачать PDF
+                  </Button>
+                  
+                  <Button 
+                    variant="outline-primary" 
+                    size="sm" 
+                    onClick={() => { if (selectedLegalEntity) loadWildberriesOrders(selectedLegalEntity); }}
+                    className="me-2"
+                  >
+                    <i className="bi bi-arrow-repeat me-1"></i> Обновить
+                  </Button>
+                </div>
+                
+                {wbOrdersLoading ? (
+                  <div className="text-center py-5">
+                    <Spinner animation="border" variant="primary" />
+                    <p className="mt-3">Загрузка заказов...</p>
+                  </div>
+                ) : wbOrdersError ? (
+                  <Alert variant="danger">
+                    <i className="bi bi-exclamation-triangle me-2"></i>
+                    {wbOrdersError}
+                  </Alert>
+                ) : wbOrders.length === 0 ? (
+                  <Alert variant="info">
+                    <i className="bi bi-info-circle me-2"></i>
+                    Заказы не найдены
+                  </Alert>
+                ) : (
+                  <div className="table-responsive">
+                    <Table hover bordered striped>
+                      <thead>
+                        <tr>
+                          <th>
+                            <Form.Check
+                              type="checkbox"
+                              checked={selectAllWb}
+                              onChange={handleSelectAllWb}
+                              aria-label="Выбрать все заказы"
+                            />
+                          </th>
+                          <th>ID заказа</th>
+                          <th>Дата создания</th>
+                          <th>Название</th>
+                          <th>Артикул</th>
+                          <th>Статус WB</th>
+                          <th>Собственный статус</th>
+                          <th>Supply ID</th>
+                          <th>Офисы</th>
+                          <th>Цена продажи</th>
+                          <th>Штрихкоды</th>
+                          <th>Тип доставки</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {wbOrders.map((order, index) => (
+                          <tr key={order.id || order.order_id || index}>
+                            <td>
+                              <Form.Check
+                                type="checkbox"
+                                checked={selectedWbOrders.has(order.id || order.order_id || index)}
+                                onChange={() => handleSelectWbOrder(order.id || order.order_id || index)}
+                                aria-label={`Выбрать заказ ${order.id || order.order_id || index}`}
+                              />
+                            </td>
+                            <td>{order.order_id || '—'}</td>
+                            <td>{formatDate(order.created_at)}</td>
+                            <td>{order.article || '—'}</td>
+                            <td>{order.nm_id || '—'}</td>
+                            <td>
+                              <Badge bg={getBadgeColor(order.wb_status)}>
+                                {getStatusText(order.wb_status)}
+                              </Badge>
+                            </td>
+                            <td>
+                              <Badge bg={getBadgeColor(order.own_status)}>
+                                {getStatusText(order.own_status)}
+                              </Badge>
+                            </td>
+                            <td>{order.supply_id || '—'}</td>
+                            <td>
+                              {order.offices && order.offices.length > 0 
+                                ? order.offices.join(', ') 
+                                : '—'}
+                            </td>
+                            <td>{formatPrice(order.sale_price)}</td>
+                            <td>
+                              {order.skus && order.skus.length > 0 
+                                ? order.skus.join(', ') 
+                                : '—'}
+                            </td>
+                            <td>
+                              {order.delivery_type 
+                                ? <Badge bg="primary">{typeof order.delivery_type === 'string' ? order.delivery_type.toUpperCase() : order.delivery_type}</Badge>
+                                : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  </div>
+                )}
+              </Card.Body>
+            </Card>
+          </Col>
+        </Row>
+      )}
+      
+      {/* Отображение заказов Ozon */}
+      {selectedMarketplace === 'ozon' && selectedLegalEntity && (
+        <Row className="mt-4">
+          <Col>
+            <Card>
+              <Card.Header className="d-flex justify-content-between align-items-center">
+                <div>
+                  <h3 className="mb-0">Заказы OZON</h3>
+                  <p className="text-muted mb-0">
+                    Юридическое лицо: <strong>{selectedLegalEntity.title}</strong> (ИНН: {selectedLegalEntity.inn})
+                  </p>
+                </div>
+                <div>
+                  <Button 
+                    variant="outline-secondary" 
+                    size="sm" 
+                    onClick={handleClearSelectedMarketplace}
+                  >
+                    <i className="bi bi-x-circle me-1"></i>Скрыть
+                  </Button>
+                </div>
+              </Card.Header>
+              <Card.Body>
+                {statusChangeError && (
+                  <Alert variant="danger" className="mb-3" dismissible onClose={() => setStatusChangeError(null)}>
+                    <i className="bi bi-exclamation-triangle me-2"></i>
+                    {statusChangeError}
+                  </Alert>
+                )}
+                
+                {statusChangeSuccess && (
+                  <Alert variant="success" className="mb-3" dismissible onClose={() => setStatusChangeSuccess(false)}>
+                    <i className="bi bi-check-circle me-2"></i>
+                    Действие успешно выполнено
+                  </Alert>
+                )}
+                
+                <div className="mb-3">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleChangeOzonOrderStatus}
+                    disabled={selectedOzonOrders.size === 0 || statusChangeLoading}
+                    className="me-2"
+                  >
+                    {statusChangeLoading ? (
+                      <>
+                        <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
+                        Обработка...
+                      </>
+                    ) : (
+                      <>
+                        <i className="bi bi-arrow-right-circle me-2"></i>
+                        {getOzonStatusButtonText(getSelectedOzonOrdersStatus())} ({selectedOzonOrders.size})
+                      </>
+                    )}
+                  </Button>
+                  
+                  <Button
+                    variant="outline-success"
+                    size="sm"
+                    onClick={exportOzonOrdersToCsv}
+                    disabled={selectedOzonOrders.size === 0}
+                    className="me-2"
+                  >
+                    <i className="bi bi-file-earmark-excel me-1"></i> Экспорт в CSV
+                  </Button>
+                  
+                  <Button 
+                    variant="outline-primary" 
+                    size="sm" 
+                    onClick={() => { if (selectedLegalEntity) loadOzonOrders(selectedLegalEntity); }}
+                    className="me-2"
+                  >
+                    <i className="bi bi-arrow-repeat me-1"></i> Обновить
+                  </Button>
+                </div>
+                
+                {ozonOrdersLoading ? (
+                  <div className="text-center py-5">
+                    <Spinner animation="border" variant="primary" />
+                    <p className="mt-3">Загрузка заказов...</p>
+                  </div>
+                ) : ozonOrdersError ? (
+                  <Alert variant="danger">
+                    <i className="bi bi-exclamation-triangle me-2"></i>
+                    {ozonOrdersError}
+                  </Alert>
+                ) : ozonOrders.length === 0 ? (
+                  <Alert variant="info">
+                    <i className="bi bi-info-circle me-2"></i>
+                    Заказы не найдены
+                  </Alert>
+                ) : (
+                  <div className="table-responsive">
+                    <Table hover bordered striped>
+                      <thead>
+                        <tr>
+                          <th>
+                            <Form.Check
+                              type="checkbox"
+                              checked={selectAllOzon}
+                              onChange={handleSelectAllOzon}
+                              aria-label="Выбрать все заказы"
+                            />
+                          </th>
+                          <th>ID заказа</th>
+                          <th>Дата создания</th>
+                          <th>Название</th>
+                          <th>Артикул</th>
+                          <th>Статус</th>
+                          <th>Цена продажи</th>
+                          <th>Город</th>
+                          <th>Способ доставки</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ozonOrders.map((order, index) => (
+                          <tr key={order.id || order.order_id || index}>
+                            <td>
+                              <Form.Check
+                                type="checkbox"
+                                checked={selectedOzonOrders.has(order.id || order.order_id || index)}
+                                onChange={() => handleSelectOzonOrder(order.id || order.order_id || index)}
+                                aria-label={`Выбрать заказ ${order.id || order.order_id || index}`}
+                              />
+                            </td>
+                            <td>{order.order_id || '—'}</td>
+                            <td>{formatDate(order.created_at || order.created_date)}</td>
+                            <td>{order.product_name || order.name || '—'}</td>
+                            <td>{order.sku || order.article || '—'}</td>
+                            <td>
+                              <Badge bg={getBadgeColor(order.status)}>
+                                {getStatusText(order.status)}
+                              </Badge>
+                            </td>
+                            <td>{formatPrice(order.price || order.sale_price)}</td>
+                            <td>{order.city || '—'}</td>
+                            <td>{order.delivery_type || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  </div>
+                )}
+              </Card.Body>
+            </Card>
+          </Col>
+        </Row>
+      )}
+      
+      {/* Отображение заказов Яндекс Маркет */}
+      {selectedMarketplace === 'yandex-market' && selectedLegalEntity && (
+        <Row className="mt-4">
+          <Col>
+            <Card>
+              <Card.Header className="d-flex justify-content-between align-items-center">
+                <div>
+                  <h3 className="mb-0">Заказы Яндекс Маркет</h3>
+                  <p className="text-muted mb-0">
+                    Юридическое лицо: <strong>{selectedLegalEntity.title}</strong> (ИНН: {selectedLegalEntity.inn})
+                  </p>
+                </div>
+                <div>
+                  <Button 
+                    variant="outline-secondary" 
+                    size="sm" 
+                    onClick={handleClearSelectedMarketplace}
+                  >
+                    <i className="bi bi-x-circle me-1"></i>Скрыть
+                  </Button>
+                </div>
+              </Card.Header>
+              <Card.Body>
+                {statusChangeError && (
+                  <Alert variant="danger" className="mb-3" dismissible onClose={() => setStatusChangeError(null)}>
+                    <i className="bi bi-exclamation-triangle me-2"></i>
+                    {statusChangeError}
+                  </Alert>
+                )}
+                
+                {statusChangeSuccess && (
+                  <Alert variant="success" className="mb-3" dismissible onClose={() => setStatusChangeSuccess(false)}>
+                    <i className="bi bi-check-circle me-2"></i>
+                    Действие успешно выполнено
+                  </Alert>
+                )}
+                
+                <div className="mb-3">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleChangeYandexOrderStatus}
+                    disabled={selectedYmOrders.size === 0 || statusChangeLoading}
+                    className="me-2"
+                  >
+                    {statusChangeLoading ? (
+                      <>
+                        <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
+                        Обработка...
+                      </>
+                    ) : (
+                      <>
+                        <i className="bi bi-arrow-right-circle me-2"></i>
+                        {getYandexStatusButtonText(getSelectedYandexOrdersStatus())} ({selectedYmOrders.size})
+                      </>
+                    )}
+                  </Button>
+                  
+                  <Button
+                    variant="outline-success"
+                    size="sm"
+                    onClick={exportYandexOrdersToCsv}
+                    disabled={selectedYmOrders.size === 0}
+                    className="me-2"
+                  >
+                    <i className="bi bi-file-earmark-excel me-1"></i> Экспорт в CSV
+                  </Button>
+                  
+                  <Button 
+                    variant="outline-primary" 
+                    size="sm" 
+                    onClick={() => { if (selectedLegalEntity) loadYandexMarketOrders(selectedLegalEntity); }}
+                    className="me-2"
+                  >
+                    <i className="bi bi-arrow-repeat me-1"></i> Обновить
+                  </Button>
+                  
+                  <Button 
+                    variant="outline-warning" 
+                    size="sm" 
+                    onClick={debugLoadYandexOrders}
+                    title="Загрузить тестовые данные для отладки"
+                  >
+                    <i className="bi bi-bug me-1"></i> Тест
+                  </Button>
+                </div>
+                
+                {ymOrdersLoading ? (
+                  <div className="text-center py-5">
+                    <Spinner animation="border" variant="primary" />
+                    <p className="mt-3">Загрузка заказов...</p>
+                  </div>
+                ) : ymOrdersError ? (
+                  <Alert variant="danger">
+                    <i className="bi bi-exclamation-triangle me-2"></i>
+                    {ymOrdersError}
+                  </Alert>
+                ) : ymOrders.length === 0 ? (
+                  <Alert variant="info">
+                    <i className="bi bi-info-circle me-2"></i>
+                    Заказы не найдены
+                    <Button 
+                      variant="link" 
+                      className="ms-2" 
+                      onClick={debugLoadYandexOrders}
+                    >
+                      Загрузить тестовые данные
+                    </Button>
+                  </Alert>
+                ) : (
+                  <div className="table-responsive">
+                    <Table hover bordered striped>
+                      <thead>
+                        <tr>
+                          <th>
+                            <Form.Check
+                              type="checkbox"
+                              checked={selectAllYm}
+                              onChange={handleSelectAllYm}
+                              aria-label="Выбрать все заказы"
+                            />
+                          </th>
+                          <th>ID заказа</th>
+                          <th>Дата создания</th>
+                          <th>Название товара</th>
+                          <th>Код товара</th>
+                          <th>Статус</th>
+                          <th>Стоимость</th>
+                          <th>Регион</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ymOrders.map((order, index) => (
+                          <tr key={order.id || order.order_id || index}>
+                            <td>
+                              <Form.Check
+                                type="checkbox"
+                                checked={selectedYmOrders.has(order.id || order.order_id || index)}
+                                onChange={() => handleSelectYmOrder(order.id || order.order_id || index)}
+                                aria-label={`Выбрать заказ ${order.id || order.order_id || index}`}
+                              />
+                            </td>
+                            <td>{order.order_id || '—'}</td>
+                            <td>{formatDate(order.created_at || order.created_date)}</td>
+                            <td>{order.name || order.product_name || '—'}</td>
+                            <td>{order.shop_sku || order.offer_id || '—'}</td>
+                            <td>
+                              <Badge bg={getBadgeColor(order.status)}>
+                                {getStatusText(order.status)}
+                              </Badge>
+                            </td>
+                            <td>{formatPrice(order.price || order.total_price)}</td>
+                            <td>{order.region || order.delivery_region || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  </div>
+                )}
+              </Card.Body>
+            </Card>
+          </Col>
+        </Row>
+      )}
     </Container>
   );
 };

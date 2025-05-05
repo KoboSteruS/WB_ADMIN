@@ -394,8 +394,8 @@ export const generateStickersPDF = async (orders: WbOrder[]): Promise<void> => {
         
         // Добавляем стикер - центрируем на странице
         // A4 размер: 210x297 мм
-        // Размещаем изображение с размером 120x120 мм в центре страницы
-        doc.addImage(imgSrc, 'PNG', 45, 60, 120, 120);
+        // Размещаем изображение с размером 80x80 мм в центре страницы
+        doc.addImage(imgSrc, 'PNG', 65, 70, 80, 80);
         
       } catch (e) {
         console.error('Ошибка при добавлении стикера в PDF:', e);
