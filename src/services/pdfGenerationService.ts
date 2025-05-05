@@ -92,17 +92,6 @@ export const generateArticlesSummaryPDF = async (
     // Добавляем заголовок документа
     addTitleToPDF(doc, 'Сводка по заказам Wildberries', 15);
     
-    // Добавляем информацию о юридическом лице (если есть)
-    if (legalEntity) {
-      const legalText = `Юридическое лицо: ${legalEntity.title} (ИНН: ${legalEntity.inn})`;
-      addTextToPDF(doc, legalText, 0, 30, { fontSize: 10, align: 'center' });
-    }
-    
-    // Добавляем дату и время генерации
-    const now = new Date();
-    const dateTimeText = `Документ сгенерирован: ${now.toLocaleDateString('ru-RU')} ${now.toLocaleTimeString('ru-RU')}`;
-    const yPos = legalEntity ? 40 : 30;
-    addTextToPDF(doc, dateTimeText, 0, yPos, { fontSize: 10, align: 'center' });
     
     // Формируем данные для таблицы с расширенной информацией
     const tableData = Object.entries(articleGroups).map(([articleKey, orderList]) => {
@@ -132,7 +121,7 @@ export const generateArticlesSummaryPDF = async (
     ];
     
     // Добавляем таблицу с контролем ширины колонок
-    addTableToPDF(doc, tableData, headers, legalEntity ? 50 : 40, {
+    addTableToPDF(doc, tableData, headers, 40, {
       fontSize: 10,
       columnStyles: {
         0: { halign: 'left' },
@@ -182,17 +171,6 @@ export const generateOrdersListPDF = async (
     // Добавляем заголовок документа
     addTitleToPDF(doc, 'Список заказов Wildberries', 15);
     
-    // Добавляем информацию о юридическом лице (если есть)
-    if (legalEntity) {
-      const legalText = `Юридическое лицо: ${legalEntity.title} (ИНН: ${legalEntity.inn})`;
-      addTextToPDF(doc, legalText, 0, 30, { fontSize: 10, align: 'center' });
-    }
-    
-    // Добавляем дату и время генерации
-    const now = new Date();
-    const dateTimeText = `Документ сгенерирован: ${now.toLocaleDateString('ru-RU')} ${now.toLocaleTimeString('ru-RU')}`;
-    const yPos = legalEntity ? 40 : 30;
-    addTextToPDF(doc, dateTimeText, 0, yPos, { fontSize: 10, align: 'center' });
     
     // Формируем данные для таблицы
     const tableData = orders.map(order => {
@@ -252,7 +230,7 @@ export const generateOrdersListPDF = async (
     ];
     
     // Добавляем таблицу с настройками переноса текста
-    addTableToPDF(doc, tableData, headers, legalEntity ? 50 : 40, {
+    addTableToPDF(doc, tableData, headers, 50, {
       fontSize: 8,  // уменьшаем размер шрифта для альбомной ориентации и большого числа колонок
       styles: {
         overflow: 'linebreak', // Включаем перенос текста
@@ -311,17 +289,13 @@ export const generateStickersPDF = async (orders: WbOrder[]): Promise<void> => {
     // Текущий временной штамп для имени файла
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     
-    // Добавляем заголовок
-    addTitleToPDF(doc, 'Наклейки для заказов Wildberries', 15);
-    
-    // Добавляем дату и время создания документа
-    const now = new Date();
+    // Добавляем только название маркетплейса без заголовка
     addTextToPDF(
       doc,
-      `Документ сгенерирован: ${now.toLocaleDateString('ru-RU')} ${now.toLocaleTimeString('ru-RU')}`,
+      'Wildberries',
       0,
-      25,
-      { fontSize: 10, align: 'center' }
+      20,
+      { fontSize: 12, align: 'center' }
     );
     
     // Фильтруем заказы, у которых есть стикеры
@@ -362,6 +336,15 @@ export const generateStickersPDF = async (orders: WbOrder[]): Promise<void> => {
       // Добавляем новую страницу для каждого стикера кроме первого
       if (index > 0) {
         doc.addPage();
+        
+        // Добавляем только название маркетплейса на каждой странице
+        addTextToPDF(
+          doc,
+          'Wildberries',
+          0,
+          20,
+          { fontSize: 12, align: 'center' }
+        );
       }
       
       try {
@@ -372,25 +355,6 @@ export const generateStickersPDF = async (orders: WbOrder[]): Promise<void> => {
         const articleId = order.nm_id?.toString() || '';
         const productName = order.article?.toString() || '';
         
-        // Добавляем информацию о заказе над стикером
-        addTextToPDF(
-          doc,
-          `Заказ #${order.order_id} - Артикул: ${articleId}`,
-          0,
-          35,
-          { fontSize: 12, align: 'center' }
-        );
-        
-        // Добавляем название товара под артикулом
-        if (productName) {
-          addTextToPDF(
-            doc,
-            `Название: ${productName}`,
-            0,
-            45,
-            { fontSize: 10, align: 'center' }
-          );
-        }
         
         // Добавляем стикер - центрируем на странице
         // A4 размер: 210x297 мм
