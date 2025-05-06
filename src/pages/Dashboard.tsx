@@ -1447,6 +1447,175 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  /**
+   * Универсальная обработка заказов Wildberries
+   * Выполняет последовательность действий в зависимости от текущего статуса заказов:
+   * 1. Для new: Добавляет в поставку -> Переводит в assembly -> Скачивает документы
+   * 2. Для assembly: Переводит в ready_to_shipment
+   * 3. Для ready_to_shipment: Отправляет запрос на доставку -> Переводит в shipped
+   */
+  const handleComplexWbOperation = async () => {
+    if (selectedWbOrders.size === 0) {
+      setStatusChangeError('Выберите хотя бы один заказ');
+      return;
+    }
+
+    // Получаем выбранные заказы
+    const selectedOrdersData = getSelectedWbOrdersData();
+    
+    if (selectedOrdersData.length === 0) {
+      setStatusChangeError('Не удалось получить данные выбранных заказов');
+      return;
+    }
+    
+    // Проверяем, что у всех заказов один и тот же собственный статус
+    const statuses = new Set<string>();
+    selectedOrdersData.forEach(order => {
+      statuses.add((order.own_status || '').toLowerCase());
+    });
+    
+    if (statuses.size > 1) {
+      setStatusChangeError('Нельзя работать с заказами, имеющими разные собственные статусы');
+      return;
+    }
+
+    // Определяем текущий статус заказов
+    const currentStatus = getSelectedWbOrdersStatus();
+    console.log('Текущий статус заказов:', currentStatus);
+    
+    setStatusChangeLoading(true);
+    setStatusChangeError(null);
+    setStatusChangeSuccess(false);
+    
+    try {
+      // Получаем ID заказов
+      const orderIds = Array.from(selectedWbOrders).map(orderId => {
+        const order = wbOrders.find(o => 
+          (o.id || o.order_id) === orderId
+        );
+        // Используем числовое значение order_id, если это возможно
+        const finalOrderId = order?.order_id || orderId;
+        // Пытаемся преобразовать к числу, если это строка с числом
+        return typeof finalOrderId === 'string' && !isNaN(Number(finalOrderId)) 
+          ? Number(finalOrderId) 
+          : finalOrderId;
+      });
+
+      // Получаем wb_token_id из первого заказа (или используем 1 по умолчанию)
+      let wb_token_id = 1;
+      const firstSelectedOrder = selectedOrdersData[0];
+      if (firstSelectedOrder && firstSelectedOrder.wb_token) {
+        wb_token_id = firstSelectedOrder.wb_token;
+      }
+
+      console.log('ID заказов для обработки:', orderIds);
+      console.log('ID токена Wildberries:', wb_token_id);
+
+      // СЦЕНАРИЙ 1: Заказы в статусе 'new'
+      if (currentStatus === 'new') {
+        // Шаг 1: Добавляем в поставку
+        console.log('Шаг 1: Добавление заказов в поставку');
+        const addToSupplyResult = await addToSupply(orderIds, wb_token_id);
+        console.log('Результат добавления в поставку:', addToSupplyResult);
+        
+        // Шаг 2: Переводим в статус 'assembly'
+        console.log('Шаг 2: Перевод заказов в статус assembly');
+        const changeStatusResult = await changeWbOrderStatus({
+          orders: orderIds,
+          status: 'assembly',
+          wb_token_id: wb_token_id
+        });
+        console.log('Результат смены статуса:', changeStatusResult);
+        
+        // Шаг 3: Скачиваем отчеты
+        console.log('Шаг 3: Скачивание отчетов');
+        downloadWbOrderReports();
+        
+        setStatusChangeSuccess(true);
+        alert('Заказы успешно добавлены в поставку, переведены в статус "Сборка" и сгенерированы отчеты');
+      }
+      
+      // СЦЕНАРИЙ 2: Заказы в статусе 'assembly'
+      else if (currentStatus === 'assembly') {
+        // Переводим в статус 'ready_to_shipment'
+        console.log('Перевод заказов в статус ready_to_shipment');
+        const changeStatusResult = await changeWbOrderStatus({
+          orders: orderIds,
+          status: 'ready_to_shipment',
+          wb_token_id: wb_token_id
+        });
+        console.log('Результат смены статуса:', changeStatusResult);
+        
+        setStatusChangeSuccess(true);
+        alert('Заказы успешно переведены в статус "Готов к отгрузке"');
+      }
+      
+      // СЦЕНАРИЙ 3: Заказы в статусе 'ready_to_shipment'
+      else if (currentStatus === 'ready_to_shipment') {
+        // Проверяем наличие supply_id в заказах
+        const ordersWithSupplyId = selectedOrdersData.filter(order => order.supply_id);
+        if (ordersWithSupplyId.length === 0) {
+          throw new Error('У выбранных заказов отсутствует идентификатор поставки (supply_id)');
+        }
+        
+        // Получаем уникальные идентификаторы поставок
+        const supplyIdMap: {[key: string]: boolean} = {};
+        ordersWithSupplyId.forEach(order => {
+          if (order.supply_id) {
+            supplyIdMap[order.supply_id] = true;
+          }
+        });
+        const supplyIds = Object.keys(supplyIdMap);
+        
+        // Шаг 1: Отправляем запрос на доставку
+        console.log('Шаг 1: Отправка запроса на доставку');
+        const shippingResult = await requestShipping(supplyIds, wb_token_id);
+        console.log('Результат запроса на доставку:', shippingResult);
+        
+        // Шаг 2: Переводим в статус 'shipped'
+        console.log('Шаг 2: Перевод заказов в статус shipped');
+        const changeStatusResult = await changeWbOrderStatus({
+          orders: orderIds,
+          status: 'shipped',
+          wb_token_id: wb_token_id
+        });
+        console.log('Результат смены статуса:', changeStatusResult);
+        
+        setStatusChangeSuccess(true);
+        alert('Заказы успешно отправлены в доставку и переведены в статус "Отгружено"');
+      }
+      
+      // СЦЕНАРИЙ 4: Другие статусы
+      else {
+        // Для других статусов просто переводим на следующий статус
+        const nextStatus = getNextWbStatus(currentStatus);
+        console.log('Перевод заказов в статус', nextStatus);
+        const changeStatusResult = await changeWbOrderStatus({
+          orders: orderIds,
+          status: nextStatus,
+          wb_token_id: wb_token_id
+        });
+        console.log('Результат смены статуса:', changeStatusResult);
+        
+        setStatusChangeSuccess(true);
+        alert(`Заказы успешно переведены в статус "${getWbStatusButtonText(nextStatus)}"`);
+      }
+            
+      // Обновляем данные заказов с небольшой задержкой
+      setTimeout(() => {
+        if (selectedLegalEntity) {
+          loadWildberriesOrders(selectedLegalEntity);
+        }
+      }, 2000);
+    } catch (error) {
+      console.error('Ошибка универсальной обработки заказов:', error);
+      setStatusChangeError(error instanceof Error ? error.message : 'Произошла ошибка при обработке заказов');
+      alert(`Ошибка: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setStatusChangeLoading(false);
+    }
+  };
+
   return (
     <Container fluid className="dashboard-container">
 
@@ -1578,7 +1747,7 @@ const Dashboard: React.FC = () => {
                   <Button
                     variant="primary"
                     size="sm"
-                    onClick={handleChangeWbOrderStatus}
+                    onClick={handleComplexWbOperation}
                     disabled={selectedWbOrders.size === 0 || statusChangeLoading}
                     className="me-2"
                   >
@@ -1589,62 +1758,10 @@ const Dashboard: React.FC = () => {
                       </>
                     ) : (
                       <>
-                        <i className="bi bi-arrow-right-circle me-2"></i>
-                        {getWbStatusButtonText(getSelectedWbOrdersStatus())} ({selectedWbOrders.size})
+                        <i className="bi bi-magic me-2"></i>
+                        Обработать заказы ({selectedWbOrders.size})
                       </>
                     )}
-                  </Button>
-                  
-                  {getSelectedWbOrdersStatus() === 'ready_to_shipment' && (
-                    <Button
-                      variant="success"
-                      size="sm"
-                      onClick={handleWbShippingRequest}
-                      disabled={selectedWbOrders.size === 0 || statusChangeLoading}
-                      className="me-2"
-                    >
-                      {statusChangeLoading ? (
-                        <>
-                          <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
-                          Отправка запроса...
-                        </>
-                      ) : (
-                        <>
-                          <i className="bi bi-truck me-2"></i>
-                          Запрос на доставку ({selectedWbOrders.size})
-                        </>
-                      )}
-                    </Button>
-                  )}
-                  
-                  <Button
-                    variant="info"
-                    size="sm"
-                    onClick={handleAddToSupply}
-                    disabled={selectedWbOrders.size === 0 || statusChangeLoading}
-                    className="me-2"
-                  >
-                    {statusChangeLoading ? (
-                      <>
-                        <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
-                        Добавление в поставку...
-                      </>
-                    ) : (
-                      <>
-                        <i className="bi bi-box-seam me-2"></i>
-                        Добавить в поставку ({selectedWbOrders.size})
-                      </>
-                    )}
-                  </Button>
-                  
-                  <Button
-                    variant="outline-success"
-                    size="sm"
-                    onClick={downloadWbOrderReports}
-                    disabled={selectedWbOrders.size === 0}
-                    className="me-2"
-                  >
-                    <i className="bi bi-file-earmark me-1"></i> Скачать отчеты
                   </Button>
                   
                   <Button 
@@ -1711,7 +1828,7 @@ const Dashboard: React.FC = () => {
                           />
                           <SortableColumnHeader
                             column="article"
-                            title="Название"
+                            title="Наименование"
                             currentSortColumn={wbSortColumn}
                             currentSortDirection={wbSortDirection}
                             onSort={handleWbSort}
@@ -1732,19 +1849,19 @@ const Dashboard: React.FC = () => {
                           />
                           <SortableColumnHeader
                             column="own_status"
-                            title="Собственный статус"
+                            title="Внутренний статус"
                             currentSortColumn={wbSortColumn}
                             currentSortDirection={wbSortDirection}
                             onSort={handleWbSort}
                           />
                           <SortableColumnHeader
                             column="supply_id"
-                            title="Supply ID"
+                            title="Номер поставки"
                             currentSortColumn={wbSortColumn}
                             currentSortDirection={wbSortDirection}
                             onSort={handleWbSort}
                           />
-                          <th>Офисы</th>
+                          <th>Склад</th>
                           <SortableColumnHeader
                             column="sale_price"
                             title="Цена продажи"

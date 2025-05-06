@@ -207,33 +207,55 @@ export const addWbToken = async (request: AddTokenRequest): Promise<any> => {
  * @returns Результат операции
  */
 export const requestShipping = async (supplyIds: string[], tokenId: number): Promise<any> => {
-  const response = await fetch(
-    `${API_BASE_URL}/wb-orders/supply-to-delivery/?wb_token_id=${encodeURIComponent(tokenId)}`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': API_TOKEN,
-        'Accept': 'application/json',
-        'X-CSRFTOKEN': CSRF_TOKEN,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        supplyId: supplyIds
-      })
+  // Массив для хранения результатов запросов
+  const results = [];
+  
+  // Обрабатываем каждый supplyId отдельным запросом
+  for (const supplyId of supplyIds) {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/wb-orders/supply-to-delivery/?wb_token_id=${encodeURIComponent(tokenId)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': API_TOKEN,
+            'Accept': 'application/json',
+            'X-CSRFTOKEN': CSRF_TOKEN,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            supplyId: supplyId // Передаем строкой, а не массивом
+          })
+        }
+      );
+
+      const text = await response.text();
+      if (!response.ok) {
+        throw new Error(`Ошибка HTTP для поставки ${supplyId}: ${response.status} ${response.statusText}. ${text}`);
+      }
+
+      try {
+        const jsonResult = JSON.parse(text);
+        results.push({ supplyId, success: true, response: jsonResult });
+      } catch (e) {
+        console.log(`Ответ от сервера (ТЕКСТ) для поставки ${supplyId}:`, text);
+        results.push({ supplyId, success: true, message: text });
+      }
+    } catch (error) {
+      console.error(`Ошибка при запросе доставки для поставки ${supplyId}:`, error);
+      results.push({ 
+        supplyId, 
+        success: false, 
+        error: error instanceof Error ? error.message : String(error) 
+      });
     }
-  );
-
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(`Ошибка HTTP: ${response.status} ${response.statusText}. ${text}`);
   }
-
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    console.log('Ответ от сервера (ТЕКСТ):', text);
-    return { message: text };
-  }
+  
+  // Возвращаем общий результат
+  return {
+    success: results.every(r => r.success),
+    results: results
+  };
 };
 
 /**

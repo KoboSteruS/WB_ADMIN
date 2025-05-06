@@ -190,9 +190,14 @@ export const generateOrdersListPDF = async (
     // Текущий временной штамп для имени файла
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     
-    // Добавляем заголовок документа
-    addTitleToPDF(doc, 'Список заказов Wildberries', 15);
-    
+    // Добавляем заголовок документа напрямую, а не через addTitleToPDF
+    doc.setFont('Roboto');
+    doc.setFontSize(16);
+    const title = 'Список заказов Wildberries';
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const textWidth = doc.getStringUnitWidth(title) * 16 / doc.internal.scaleFactor;
+    const x = (pageWidth - textWidth) / 2;
+    doc.text(title, x, 15);
     
     // Формируем данные для таблицы
     const tableData = orders.map(order => {
@@ -237,40 +242,52 @@ export const generateOrdersListPDF = async (
       ].map(value => String(value)); // Гарантируем, что все значения преобразованы в строки
     });
     
-    // Заголовки таблицы
+    // Заголовки таблицы - предельно короткие названия для лучшего отображения
     const headers = [
-      'ID заказа', 
-      'Артикул', 
+      'ID', 
+      'Арт', 
       'Название',
       'Статус',
-      'Штрихкоды', 
+      'ШК', 
       'Цена', 
-      'Дата создания', 
-      'Офисы', 
-      'Тип доставки', 
-      'ID поставки'
+      'Дата', 
+      'Офис', 
+      'Тип', 
+      'Пост.'
     ];
     
     // Добавляем таблицу с настройками переноса текста
-    addTableToPDF(doc, tableData, headers, 50, {
+    // Уменьшаем разрыв между заголовком и таблицей до минимума
+    addTableToPDF(doc, tableData, headers, 18, {
       fontSize: 8,  // уменьшаем размер шрифта для альбомной ориентации и большого числа колонок
       styles: {
         overflow: 'linebreak', // Включаем перенос текста
-        cellPadding: 2,        // Небольшие отступы в ячейках
+        cellPadding: 1,        // Минимальные отступы в ячейках
         lineColor: [80, 80, 80], // Цвет линий
-        lineWidth: 0.1          // Толщина линий
+        lineWidth: 0.1,         // Минимальная толщина линий
+        font: 'Roboto',         // Явно указываем шрифт для всей таблицы
+        fontStyle: 'normal'    // Явно указываем стиль шрифта
+      },
+      headStyles: {
+        font: 'Roboto',
+        fontStyle: 'normal',
+        halign: 'center',
+        valign: 'middle',
+        fillColor: [66, 139, 202],
+        textColor: [255, 255, 255],
+        fontSize: 8
       },
       columnStyles: {
-        0: { halign: 'center' },
-        1: { halign: 'center' },
-        2: { halign: 'left', overflow: 'linebreak' },  // Включаем перенос в названии товара
-        3: { halign: 'center' },
-        4: { halign: 'left', overflow: 'linebreak' },  // Включаем перенос в штрихкодах
-        5: { halign: 'right' },
-        6: { halign: 'center' },
-        7: { halign: 'left', overflow: 'linebreak' },  // Включаем перенос в офисах
-        8: { halign: 'center' },
-        9: { halign: 'center' }
+        0: { halign: 'center', font: 'Roboto', fontStyle: 'normal' },  // Явно указываем шрифт для каждой колонки
+        1: { halign: 'center', font: 'Roboto', fontStyle: 'normal' },
+        2: { halign: 'left', overflow: 'linebreak', font: 'Roboto', fontStyle: 'normal' },  // Включаем перенос в названии товара
+        3: { halign: 'center', font: 'Roboto', fontStyle: 'normal' },
+        4: { halign: 'left', overflow: 'linebreak', font: 'Roboto', fontStyle: 'normal' },  // Включаем перенос в штрихкодах
+        5: { halign: 'right', font: 'Roboto', fontStyle: 'normal' },
+        6: { halign: 'center', font: 'Roboto', fontStyle: 'normal' },
+        7: { halign: 'left', overflow: 'linebreak', font: 'Roboto', fontStyle: 'normal' },  // Включаем перенос в офисах
+        8: { halign: 'center', font: 'Roboto', fontStyle: 'normal' },
+        9: { halign: 'center', font: 'Roboto', fontStyle: 'normal' }
       },
       // Задаем относительную ширину колонок
       columnWidths: [
@@ -285,8 +302,8 @@ export const generateOrdersListPDF = async (
         5,  // Тип доставки
         5   // ID поставки
       ],
-      width: doc.internal.pageSize.getWidth() - 20, // отступы по 10мм с каждой стороны
-      margin: { top: 10, bottom: 10 } // добавляем верхний и нижний отступы
+      width: doc.internal.pageSize.getWidth() - 15, // отступы по 7.5мм с каждой стороны
+      margin: { top: 3, bottom: 3 } // минимальные отступы
     });
     
     // Сохраняем PDF
@@ -444,9 +461,9 @@ export const generateSupplyBarcodePDF = async (supplyBarcode: string, supplyId: 
       return;
     }
     
-    // Используем стандартный размер A4
-    const PDF_WIDTH = 58; // ширина A4 в мм
-    const PDF_HEIGHT = 40; // высота A4 в мм
+    // Точные размеры стикера
+    const PDF_WIDTH = 58; // ширина стикера в мм
+    const PDF_HEIGHT = 40; // высота стикера в мм
     
     // Текущий временной штамп для имени файла
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -455,8 +472,8 @@ export const generateSupplyBarcodePDF = async (supplyBarcode: string, supplyId: 
     const pdfDoc = new jsPDF({
       orientation: 'landscape',
       unit: 'mm',
-      format: 'a4', // Используем стандартный формат A4
-      compress: true,
+      format: [PDF_WIDTH, PDF_HEIGHT], // Точный размер стикера
+      hotfixes: ['px_scaling'] // Исправление для масштабирования пикселей
     });
     
     try {
@@ -470,36 +487,15 @@ export const generateSupplyBarcodePDF = async (supplyBarcode: string, supplyId: 
         img.onerror = (error) => reject(error);
       });
       
-      // Определяем размеры для добавления изображения в PDF
-      const maxWidth = PDF_WIDTH; // отступы по 20мм с каждой стороны
-      const maxHeight = PDF_HEIGHT; // оставляем место для текста
-      
-      // Сохраняем соотношение сторон
-      const imgRatio = img.width / img.height;
-      let drawWidth = maxWidth;
-      let drawHeight = drawWidth / imgRatio;
-      
-      // Если высота выходит за пределы, корректируем размеры
-      if (drawHeight > maxHeight) {
-        drawHeight = maxHeight;
-        drawWidth = drawHeight * imgRatio;
-      }
-      
-      // Центрируем изображение
-      const xOffset = (PDF_WIDTH - drawWidth) / 2;
-      const yOffset = 50; // Отступ сверху для заголовка
-      
-      // Добавляем заголовок
-      pdfDoc.setFont('helvetica', 'bold');
-      pdfDoc.setFontSize(24);
-      pdfDoc.text(`Поставка: ${supplyId}`, PDF_WIDTH/2, 30, { align: 'center' });
-      
-      // Добавляем штрих-код
-      pdfDoc.addImage(img, 'PNG', xOffset, yOffset, drawWidth, drawHeight);
-      
-      // Добавляем текст внизу
-      pdfDoc.setFontSize(14);
-      pdfDoc.text('Wildberries Supply Barcode', PDF_WIDTH/2, PDF_HEIGHT - 20, { align: 'center' });
+      // Растягиваем изображение на всю страницу без сохранения пропорций
+      pdfDoc.addImage(
+        img, 
+        'PNG', 
+        0, // x - начинаем с левого края
+        0, // y - начинаем с верхнего края
+        PDF_WIDTH, // используем всю ширину
+        PDF_HEIGHT // используем всю высоту
+      );
       
       // Сохраняем PDF
       const filename = `WB_Supply_${supplyId}_${timestamp}.pdf`;

@@ -27,7 +27,13 @@ import { formatDate, formatPrice, getStatusButtonText, isBase64Image, getImageSr
 import { getBadgeColor, getStatusText } from '../../utils/statusHelpers';
 
 // Импортируем API сервис
-import { fetchWbOrders, changeOrderStatus, addWbToken, requestShipping } from '../../services/wildberriesApi';
+import { 
+  fetchWbOrders, 
+  changeOrderStatus, 
+  addWbToken, 
+  requestShipping,
+  addToSupply 
+} from '../../services/wildberriesApi';
 
 // Импортируем сервис генерации PDF
 import { 
@@ -313,52 +319,168 @@ export const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) =
   };
 
   /**
-   * Обработчик смены статуса заказов
+   * Получает следующий статус для заказов Wildberries
    */
-  const handleChangeOrderStatus = async () => {
+  const getNextWbStatus = (currentStatus: string): string => {
+    switch (currentStatus.toLowerCase()) {
+      case 'new':
+        return 'assembly';
+      case 'assembly':
+        return 'ready_to_shipment';
+      case 'ready_to_shipment':
+        return 'shipped';
+      default:
+        return 'new';
+    }
+  };
+
+  /**
+   * Универсальная обработка заказов Wildberries
+   * Выполняет последовательность действий в зависимости от текущего статуса заказов:
+   * 1. Для new: Добавляет в поставку -> Переводит в assembly -> Скачивает документы
+   * 2. Для assembly: Переводит в ready_to_shipment
+   * 3. Для ready_to_shipment: Отправляет запрос на доставку -> Переводит в shipped
+   */
+  const handleComplexOperation = async () => {
     if (selectionCount === 0) {
       setStatusChangeError('Выберите хотя бы один заказ');
       return;
     }
 
-    // Определяем текущий статус выбранных заказов
-    const currentStatus = getSelectedOrdersStatus();
-    // Определяем следующий статус
-    const nextStatus = getNextOrdersStatus();
+    // Получаем выбранные заказы
+    const selectedOrdersData = getSelectedOrdersData();
+    
+    if (selectedOrdersData.length === 0) {
+      setStatusChangeError('Не удалось получить данные выбранных заказов');
+      return;
+    }
 
+    // Определяем текущий статус заказов
+    const currentStatus = getSelectedOrdersStatus();
+    console.log('Текущий статус заказов:', currentStatus);
+    
     setStatusChangeLoading(true);
     setStatusChangeError(null);
     setStatusChangeSuccess(false);
-
+    
     try {
       // Получаем ID заказов
-      const orderIds = Array.from(selectedOrders).map(orderId => {
-        const order = displayOrders.find(o => 
-          (o.id || o.order_id) === orderId
-        );
-        return order?.order_id || orderId;
+      const orderIds = Array.from(selectedOrders).map(id => {
+        // Пытаемся привести к числу
+        const numericId = parseInt(id.toString(), 10);
+        return isNaN(numericId) ? id : numericId;
       });
 
-      // Отправляем запрос на изменение статуса через API-сервис
-      await changeOrderStatus({
-            orders: orderIds,
-            status: nextStatus
-      });
+      // Получаем wb_token_id из первого заказа (или используем токен из пропсов)
+      let wb_token_id = token ? parseInt(token, 10) : 1;
+      const firstSelectedOrder = selectedOrdersData[0];
+      if (firstSelectedOrder && firstSelectedOrder.wb_token) {
+        wb_token_id = typeof firstSelectedOrder.wb_token === 'number' 
+          ? firstSelectedOrder.wb_token 
+          : parseInt(String(firstSelectedOrder.wb_token), 10);
+      }
 
-        setStatusChangeSuccess(true);
+      console.log('ID заказов для обработки:', orderIds);
+      console.log('ID токена Wildberries:', wb_token_id);
+
+      // СЦЕНАРИЙ 1: Заказы в статусе 'new'
+      if (currentStatus === 'new') {
+        // Шаг 1: Добавляем в поставку
+        console.log('Шаг 1: Добавление заказов в поставку');
+        const addToSupplyResult = await addToSupply(orderIds, wb_token_id);
+        console.log('Результат добавления в поставку:', addToSupplyResult);
         
-        // Если переходим в статус "assembly", скачиваем отчеты
-        if (nextStatus === 'assembly') {
-          downloadOrderReports();
+        // Шаг 2: Переводим в статус 'assembly'
+        console.log('Шаг 2: Перевод заказов в статус assembly');
+        const changeStatusResult = await changeOrderStatus({
+          orders: orderIds,
+          status: 'assembly',
+          wb_token_id: wb_token_id
+        });
+        console.log('Результат смены статуса:', changeStatusResult);
+        
+        // Шаг 3: Скачиваем отчеты
+        console.log('Шаг 3: Скачивание отчетов');
+        downloadOrderReports();
+        
+        setStatusChangeSuccess(true);
+        alert('Заказы успешно добавлены в поставку, переведены в статус "Сборка" и сгенерированы отчеты');
+      }
+      
+      // СЦЕНАРИЙ 2: Заказы в статусе 'assembly'
+      else if (currentStatus === 'assembly') {
+        // Переводим в статус 'ready_to_shipment'
+        console.log('Перевод заказов в статус ready_to_shipment');
+        const changeStatusResult = await changeOrderStatus({
+          orders: orderIds,
+          status: 'ready_to_shipment',
+          wb_token_id: wb_token_id
+        });
+        console.log('Результат смены статуса:', changeStatusResult);
+        
+        setStatusChangeSuccess(true);
+        alert('Заказы успешно переведены в статус "Готов к отгрузке"');
+      }
+      
+      // СЦЕНАРИЙ 3: Заказы в статусе 'ready_to_shipment'
+      else if (currentStatus === 'ready_to_shipment') {
+        // Проверяем наличие supply_id в заказах
+        const ordersWithSupplyId = selectedOrdersData.filter(order => order.supply_id);
+        if (ordersWithSupplyId.length === 0) {
+          throw new Error('У выбранных заказов отсутствует идентификатор поставки (supply_id)');
         }
         
-        // Обновляем данные заказов
-        setTimeout(() => {
+        // Получаем уникальные идентификаторы поставок
+        const supplyIdMap: {[key: string]: boolean} = {};
+        ordersWithSupplyId.forEach(order => {
+          if (order.supply_id) {
+            supplyIdMap[order.supply_id] = true;
+          }
+        });
+        const supplyIds = Object.keys(supplyIdMap);
+        
+        // Шаг 1: Отправляем запрос на доставку
+        console.log('Шаг 1: Отправка запроса на доставку');
+        const shippingResult = await requestShipping(supplyIds, wb_token_id);
+        console.log('Результат запроса на доставку:', shippingResult);
+        
+        // Шаг 2: Переводим в статус 'shipped'
+        console.log('Шаг 2: Перевод заказов в статус shipped');
+        const changeStatusResult = await changeOrderStatus({
+          orders: orderIds,
+          status: 'shipped',
+          wb_token_id: wb_token_id
+        });
+        console.log('Результат смены статуса:', changeStatusResult);
+        
+        setStatusChangeSuccess(true);
+        alert('Заказы успешно отправлены в доставку и переведены в статус "Отгружено"');
+      }
+      
+      // СЦЕНАРИЙ 4: Другие статусы
+      else {
+        // Для других статусов просто переводим на следующий статус
+        const nextStatus = getNextWbStatus(currentStatus);
+        console.log('Перевод заказов в статус', nextStatus);
+        const changeStatusResult = await changeOrderStatus({
+          orders: orderIds,
+          status: nextStatus,
+          wb_token_id: wb_token_id
+        });
+        console.log('Результат смены статуса:', changeStatusResult);
+        
+        setStatusChangeSuccess(true);
+        alert(`Заказы успешно переведены в статус "${getStatusButtonText(nextStatus)}"`);
+      }
+        
+      // Обновляем данные заказов с небольшой задержкой
+      setTimeout(() => {
         fetchWildberriesOrders();
-        }, 1500);
+      }, 2000);
     } catch (error) {
-      console.error('Ошибка запроса:', error);
-      setStatusChangeError('Произошла ошибка при отправке запроса');
+      console.error('Ошибка универсальной обработки заказов:', error);
+      setStatusChangeError(error instanceof Error ? error.message : 'Произошла ошибка при обработке заказов');
+      alert(`Ошибка: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setStatusChangeLoading(false);
     }
@@ -400,65 +522,6 @@ export const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) =
     } catch (error) {
       console.error('Ошибка при генерации отчетов:', error);
       alert(`Произошла ошибка при генерации отчетов: ${error instanceof Error ? (error as Error).message : String(error)}`);
-    }
-  };
-
-  /**
-   * Обработчик запроса на доставку
-   */
-  const handleShippingRequest = async () => {
-    if (selectionCount === 0) {
-      alert('Выберите хотя бы один заказ для запроса на доставку');
-      return;
-    }
-
-    // Получаем выбранные заказы
-    const selectedOrdersData = getSelectedOrdersData();
-    
-    if (selectedOrdersData.length === 0) {
-      alert('Не удалось получить данные выбранных заказов');
-      return;
-    }
-    
-    // Проверяем наличие supply_id в заказах
-    const ordersWithSupplyId = selectedOrdersData.filter(order => order.supply_id);
-    if (ordersWithSupplyId.length === 0) {
-      alert('У выбранных заказов отсутствует идентификатор поставки (supply_id)');
-      return;
-    }
-    
-    // Получаем уникальные идентификаторы поставок
-    const supplyIdMap: {[key: string]: boolean} = {};
-    ordersWithSupplyId.forEach(order => {
-      if (order.supply_id) {
-        supplyIdMap[order.supply_id] = true;
-      }
-    });
-    const supplyIds = Object.keys(supplyIdMap);
-    
-    // Получаем wb_token_id из первого заказа (предполагаем, что все заказы имеют одинаковый токен)
-    const wb_token_id = ordersWithSupplyId[0].wb_token || 1;
-    
-    try {
-      // Показываем индикатор загрузки
-      setStatusChangeLoading(true);
-      
-      // Отправляем запрос через API-сервис
-      await requestShipping(supplyIds, wb_token_id);
-      
-        setStatusChangeSuccess(true);
-        alert(`Запрос на доставку успешно отправлен для ${supplyIds.length} поставок`);
-        
-        // Обновляем данные заказов
-        setTimeout(() => {
-        fetchWildberriesOrders();
-        }, 1500);
-    } catch (error) {
-      console.error('Ошибка запроса:', error);
-      alert(`Произошла ошибка при отправке запроса: ${error instanceof Error ? error.message : String(error)}`);
-      setStatusChangeError('Произошла ошибка при отправке запроса');
-    } finally {
-      setStatusChangeLoading(false);
     }
   };
 
@@ -510,7 +573,7 @@ export const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) =
               <Button
                 variant="primary"
                 size="sm"
-                onClick={handleChangeOrderStatus}
+                onClick={handleComplexOperation}
                 disabled={selectionCount === 0 || statusChangeLoading}
               >
                 {statusChangeLoading ? (
@@ -520,32 +583,11 @@ export const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) =
                   </>
                 ) : (
                   <>
-                    <i className="bi bi-arrow-right-circle me-2"></i>
-                    {getStatusButtonText(getSelectedOrdersStatus())} ({selectionCount})
+                    <i className="bi bi-magic me-2"></i>
+                    Обработать заказы ({selectionCount})
                   </>
                 )}
               </Button>
-              
-              {getSelectedOrdersStatus() === 'ready_to_shipment' && (
-                <Button
-                  variant="success"
-                  size="sm"
-                  onClick={handleShippingRequest}
-                  disabled={selectionCount === 0 || statusChangeLoading}
-                >
-                  {statusChangeLoading ? (
-                    <>
-                      <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
-                      Отправка запроса...
-                    </>
-                  ) : (
-                    <>
-                      <i className="bi bi-truck me-2"></i>
-                      Запрос на доставку ({selectionCount})
-                    </>
-                  )}
-                </Button>
-              )}
               
               <Button
                 variant="outline-primary" 
@@ -553,15 +595,6 @@ export const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) =
                 onClick={showTestData ? toggleDataSource : fetchWildberriesOrders}
               >
                 <i className="bi bi-arrow-repeat"></i> {showTestData ? "Показать реальные данные" : "Обновить"}
-              </Button>
-              <Button
-                variant="outline-success"
-                size="sm"
-                onClick={downloadOrderReports}
-                disabled={selectionCount === 0}
-                className="me-2"
-              >
-                <i className="bi bi-file-earmark me-1"></i> Скачать отчеты
               </Button>
               <Button 
                 variant="primary"
