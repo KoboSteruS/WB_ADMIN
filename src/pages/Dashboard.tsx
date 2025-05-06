@@ -347,15 +347,25 @@ const Dashboard: React.FC = () => {
    * Получает следующий статус для заказов Wildberries
    */
   const getNextWbStatus = (currentStatus: string): string => {
-    switch (currentStatus.toLowerCase()) {
+    const status = currentStatus.toLowerCase();
+    
+    // Никогда не возвращаемся к статусу "new"
+    switch (status) {
       case 'new':
         return 'assembly';
       case 'assembly':
         return 'ready_to_shipment';
       case 'ready_to_shipment':
         return 'shipped';
+      case 'shipped':
+        return 'shipped'; // Оставляем тот же статус
+      case 'mixed':
+        // Для смешанных статусов, возвращаем следующий логический статус
+        // Чаще всего это будет assembly
+        return 'assembly';
       default:
-        return 'new';
+        // По умолчанию продвигаем к статусу assembly
+        return 'assembly';
     }
   };
   
@@ -371,13 +381,23 @@ const Dashboard: React.FC = () => {
     // Заполняем множество статусами всех выбранных заказов
     wbOrders.forEach(order => {
       if (selectedWbOrders.has(order.id || order.order_id || '')) {
-        statuses.add((order.wb_status || order.own_status || 'new').toLowerCase());
+        // Приоритет отдаем own_status (собственный статус)
+        const status = (order.own_status || order.wb_status || 'new').toLowerCase();
+        console.log('Статус заказа:', order.order_id, 'own_status:', order.own_status, 'wb_status:', order.wb_status, 'итоговый статус:', status);
+        statuses.add(status);
       }
     });
     
+    console.log('Уникальные статусы выбранных заказов:', Array.from(statuses));
+    
     // Если все заказы имеют один и тот же статус, возвращаем его
     if (statuses.size === 1) {
-      return Array.from(statuses)[0];
+      const status = Array.from(statuses)[0];
+      // Если статус пустой или null, возвращаем "assembly" вместо "new"
+      if (!status || status === 'null' || status === 'undefined') {
+        return 'assembly';
+      }
+      return status;
     }
     
     // Если статусы разные, возвращаем смешанный статус
@@ -422,12 +442,25 @@ const Dashboard: React.FC = () => {
       return;
     }
 
-    // Проверяем, что у всех заказов один и тот же собственный статус
+    // Получаем выбранные заказы
     const selectedOrdersData = getSelectedWbOrdersData();
+    
+    // Проверяем данные о заказах
+    if (selectedOrdersData.length === 0) {
+      setStatusChangeError('Не удалось получить данные о выбранных заказах');
+      return;
+    }
+    
+    // Проверяем, что у всех заказов один и тот же собственный статус
     const statuses = new Set<string>();
     selectedOrdersData.forEach(order => {
-      statuses.add((order.own_status || '').toLowerCase());
+      // Добавляем только непустые статусы
+      if (order.own_status) {
+        statuses.add(order.own_status.toLowerCase());
+      }
     });
+    
+    console.log('Собственные статусы выбранных заказов:', Array.from(statuses));
     
     if (statuses.size > 1) {
       setStatusChangeError('Нельзя работать с заказами, имеющими разные собственные статусы');
@@ -436,9 +469,29 @@ const Dashboard: React.FC = () => {
 
     // Определяем текущий статус выбранных заказов
     const currentStatus = getSelectedWbOrdersStatus();
+    console.log('Текущий определенный статус:', currentStatus);
+    
+    // Проверяем на пустой статус
+    if (!currentStatus || currentStatus === 'null' || currentStatus === 'undefined') {
+      console.log('Статус не определен или пустой, используем assembly');
+      const nextStatus = 'assembly';
+      processStatusChange(nextStatus, selectedOrdersData);
+      return;
+    }
+    
     // Определяем следующий статус
     const nextStatus = getNextWbStatus(currentStatus);
 
+    console.log('Текущий статус:', currentStatus);
+    console.log('Следующий статус:', nextStatus);
+
+    processStatusChange(nextStatus, selectedOrdersData);
+  };
+  
+  /**
+   * Обработка изменения статуса (вынесена в отдельную функцию для удобства)
+   */
+  const processStatusChange = async (nextStatus: string, selectedOrdersData: WbOrder[]) => {
     setStatusChangeLoading(true);
     setStatusChangeError(null);
     setStatusChangeSuccess(false);
@@ -449,15 +502,45 @@ const Dashboard: React.FC = () => {
         const order = wbOrders.find(o => 
           (o.id || o.order_id) === orderId
         );
-        return order?.order_id || orderId;
+        // Используем числовое значение order_id, если это возможно
+        const finalOrderId = order?.order_id || orderId;
+        // Пытаемся преобразовать к числу, если это строка с числом
+        return typeof finalOrderId === 'string' && !isNaN(Number(finalOrderId)) 
+          ? Number(finalOrderId) 
+          : finalOrderId;
       });
 
-      // Отправляем запрос на изменение статуса через API-сервис
-      await changeWbOrderStatus({
+      // Получаем wb_token_id из первого заказа (или используем 1 по умолчанию)
+      let wb_token_id = 1;
+      const firstSelectedOrder = selectedOrdersData[0];
+      if (firstSelectedOrder && firstSelectedOrder.wb_token) {
+        wb_token_id = firstSelectedOrder.wb_token;
+      }
+
+      console.log('Выбранные заказы:', selectedWbOrders);
+      console.log('Данные выбранных заказов:', selectedOrdersData);
+      console.log('ID заказов для отправки:', orderIds);
+      console.log('ID токена Wildberries:', wb_token_id);
+      console.log('Новый статус:', nextStatus);
+
+      // Проверяем, что массив не пустой
+      if (orderIds.length === 0) {
+        throw new Error('Не удалось получить ID заказов');
+      }
+
+      // Проверяем статус перед отправкой
+      if (!nextStatus) {
+        throw new Error('Не удалось определить следующий статус');
+      }
+
+      // Отправляем запрос на изменение статуса через API-сервис с указанием токена
+      const result = await changeWbOrderStatus({
         orders: orderIds,
-        status: nextStatus
+        status: nextStatus,
+        wb_token_id: wb_token_id
       });
 
+      console.log('Результат смены статуса:', result);
       setStatusChangeSuccess(true);
         
       // Если переходим в статус "assembly", скачиваем PDF-файлы
@@ -465,15 +548,15 @@ const Dashboard: React.FC = () => {
         downloadWbOrderPDFs();
       }
         
-      // Обновляем данные заказов
+      // Обновляем данные заказов с небольшой задержкой
       setTimeout(() => {
         if (selectedLegalEntity) {
           loadWildberriesOrders(selectedLegalEntity);
         }
-      }, 1500);
+      }, 2000);
     } catch (error) {
       console.error('Ошибка запроса:', error);
-      setStatusChangeError('Произошла ошибка при отправке запроса');
+      setStatusChangeError(error instanceof Error ? error.message : 'Произошла ошибка при отправке запроса');
     } finally {
       setStatusChangeLoading(false);
     }
@@ -496,6 +579,8 @@ const Dashboard: React.FC = () => {
       const nmIdB = b.nm_id?.toString().toLowerCase() || '';
       return nmIdA.localeCompare(nmIdB);
     });
+    
+    console.log('Генерация PDF для заказов:', sortedByNmId);
     
     // Генерируем PDF с выбранными заказами через сервис
     generateOrdersPDF(sortedByNmId, selectedLegalEntity || undefined);

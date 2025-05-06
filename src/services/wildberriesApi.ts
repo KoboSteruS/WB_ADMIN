@@ -80,30 +80,87 @@ export const fetchWbOrders = async (legalEntityId?: string, statusWbConfirm: boo
  * @returns Результат операции
  */
 export const changeOrderStatus = async (request: ChangeStatusRequest): Promise<any> => {
-  const response = await fetch(
-    `${API_BASE_URL}/wb-orders/change-order-status/`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': API_TOKEN,
-        'Accept': 'application/json',
-        'X-CSRFTOKEN': CSRF_TOKEN,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(request)
-    }
-  );
-
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(`Ошибка HTTP: ${response.status} ${response.statusText}. ${text}`);
+  // Проверка наличия заказов
+  if (!request.orders || !Array.isArray(request.orders) || request.orders.length === 0) {
+    console.error('Ошибка: пустой массив заказов', request);
+    throw new Error('Не выбраны заказы для изменения статуса');
   }
 
+  // Проверка корректности статуса
+  if (!request.status) {
+    console.error('Ошибка: отсутствует статус', request);
+    throw new Error('Статус для изменения не указан');
+  }
+  
+  // Проверяем, что статус не 'new'
+  if (request.status.toLowerCase() === 'new') {
+    console.error('Ошибка: статус new не может быть установлен', request);
+    throw new Error('Статус "new" не может быть установлен для заказов');
+  }
+
+  // Получаем токен WB из запроса или используем по умолчанию
+  const wb_token_id = request.wb_token_id || 1;
+  
+  // Формируем URL с параметрами
+  const url = `${API_BASE_URL}/wb-orders/change-order-status/?wb_token_id=${wb_token_id}`;
+  
+  // Формируем тело запроса
+  const requestBody = {
+    orders: request.orders,
+    status: request.status
+  };
+  
+  console.log('Отправка запроса на изменение статуса:', {
+    url: url,
+    method: 'POST',
+    headers: {
+      'Authorization': API_TOKEN,
+      'Accept': 'application/json',
+      'X-CSRFTOKEN': CSRF_TOKEN,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(requestBody)
+  });
+
   try {
-    return JSON.parse(text);
-  } catch (e) {
-    console.log('Ответ от сервера (ТЕКСТ):', text);
-    return { message: text };
+    const response = await fetch(
+      url,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': API_TOKEN,
+          'Accept': 'application/json',
+          'X-CSRFTOKEN': CSRF_TOKEN,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      }
+    );
+
+    const text = await response.text();
+    console.log('Статус ответа:', response.status, response.statusText);
+    console.log('Тело ответа:', text);
+
+    // Даже если ответ не OK, но есть текст - попробуем распарсить
+    try {
+      const jsonResponse = JSON.parse(text);
+      if (!response.ok) {
+        // Если пришел JSON с ошибкой, формируем сообщение об ошибке
+        const errorMessage = jsonResponse.detail || jsonResponse.error || jsonResponse.message || JSON.stringify(jsonResponse);
+        throw new Error(errorMessage);
+      }
+      return jsonResponse;
+    } catch (parseError) {
+      // Если не получилось распарсить как JSON
+      if (!response.ok) {
+        throw new Error(`Ошибка HTTP: ${response.status} ${response.statusText}. ${text}`);
+      }
+      console.log('Ответ от сервера (не JSON):', text);
+      return { message: text, success: response.ok };
+    }
+  } catch (error) {
+    console.error('Ошибка при изменении статуса заказов:', error);
+    throw error;
   }
 };
 

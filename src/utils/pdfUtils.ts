@@ -64,16 +64,23 @@ export const loadAndCacheFont = async (): Promise<string> => {
 };
 
 /**
+ * Тип для PDF документа, совместимый с autoTable
+ */
+type PDFDocumentWithTables = jsPDF & {
+  autoTable?: typeof autoTable;
+};
+
+/**
  * Создаёт PDF документ с поддержкой кириллицы
  */
-export const createPDFWithCyrillicSupport = async (options: { orientation?: 'portrait' | 'landscape' } = {}): Promise<jsPDF> => {
+export const createPDFWithCyrillicSupport = async (options: { orientation?: 'portrait' | 'landscape' } = {}): Promise<PDFDocumentWithTables> => {
   try {
     // Создаем PDF документ с нужной ориентацией
     const doc = new jsPDF({
       orientation: options.orientation || 'portrait',
       unit: 'mm',
       format: 'a4'
-    });
+    }) as PDFDocumentWithTables;
     
     // Загружаем и получаем шрифт из кэша
     const base64Font = await loadAndCacheFont();
@@ -125,7 +132,7 @@ export const transliterateText = (text: string): string => {
 /**
  * Добавляет текст на русском языке в PDF документ
  */
-export const addTextToPDF = (doc: jsPDF, text: string, x: number, y: number, options: { fontSize?: number, align?: string } = {}): void => {
+export const addTextToPDF = (doc: PDFDocumentWithTables, text: string, x: number, y: number, options: { fontSize?: number, align?: string } = {}): void => {
   const fontSize = options.fontSize || 12;
   doc.setFontSize(fontSize);
   
@@ -145,7 +152,7 @@ export const addCyrillicText = addTextToPDF;
 /**
  * Добавляет заголовок на русском языке в PDF документ
  */
-export const addTitleToPDF = (doc: jsPDF, title: string, fontSize: number = 16): void => {
+export const addTitleToPDF = (doc: PDFDocumentWithTables, title: string, fontSize: number = 16): void => {
   doc.setFontSize(fontSize);
   const textWidth = doc.getStringUnitWidth(title) * fontSize / doc.internal.scaleFactor;
   const x = (doc.internal.pageSize.getWidth() - textWidth) / 2;
@@ -162,7 +169,7 @@ export const addCyrillicTitle = addTitleToPDF;
  * для лучшей поддержки переноса текста и форматирования ячеек
  */
 export const addTableToPDF = (
-  doc: jsPDF,
+  doc: PDFDocumentWithTables,
   data: (string | number)[][],
   headers: string[],
   startY: number,
@@ -244,31 +251,18 @@ export const addTableToPDF = (
     return rowData;
   });
   
-  // Используем autoTable для создания таблицы с явной установкой шрифта и кодировки
-  autoTable(doc, {
+  // Используем глобальную функцию autoTable вместо вызова метода документа
+  autoTable(doc as any, {
     startY: startY,
     head: headRows, // Используем правильно подготовленные заголовки
     body: bodyRows,  // Используем правильно подготовленные данные
-    margin: { left: margins.left, right: margins.right },
-    styles: {
-      ...styles,
-      font: 'Roboto', // Явно указываем основной шрифт
-      fontStyle: 'normal'
-    },
+    styles: styles,
     headStyles: headerStyles,
     columnStyles: columnStyles,
+    margin: options.margin || { left: margins.left, right: margins.right },
+    theme: options.theme || 'grid',
     tableWidth: tableWidth,
-    // Дополнительные настройки из options
-    ...(options.margin && { margin: options.margin }),
-    theme: 'striped', // Используем тему striped для лучшей читаемости
-    didDrawCell: (data) => {
-      // Дополнительные действия при отрисовке ячейки
-    },
-    didParseCell: (data) => {
-      // Устанавливаем шрифт для каждой ячейки
-      data.cell.styles.font = 'Roboto';
-      data.cell.styles.fontStyle = 'normal';
-    }
+    didDrawCell: options.didDrawCell
   });
 };
 

@@ -289,88 +289,49 @@ export const generateStickersPDF = async (orders: WbOrder[]): Promise<void> => {
     // Текущий временной штамп для имени файла
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     
-    // Добавляем только название маркетплейса без заголовка
-    addTextToPDF(
-      doc,
-      'Wildberries',
-      0,
-      20,
-      { fontSize: 12, align: 'center' }
-    );
-    
-    // Фильтруем заказы, у которых есть стикеры
-    const ordersWithStickers = orders.filter(order => order.sticker && isBase64Image(order.sticker));
-    
-    // Если нет стикеров, создаем PDF с информационным сообщением
-    if (ordersWithStickers.length === 0) {
-      console.log('Нет заказов со стикерами для создания PDF');
+    // Если нет заказов, создаем пустой PDF
+    if (orders.length === 0) {
+      console.log('Нет заказов для создания стикеров');
       
-      // Добавляем информационное сообщение
-      addTextToPDF(
-        doc,
-        'В выбранных заказах отсутствуют стикеры',
-        0,
-        50,
-        { fontSize: 14, align: 'center' }
-      );
-      
-      // Добавляем пояснительный текст
-      addTextToPDF(
-        doc,
-        'Для получения стикеров необходимо подтвердить заказы и дождаться их обработки маркетплейсом',
-        0,
-        70,
-        { fontSize: 12, align: 'center' }
-      );
-      
-      // Сохраняем PDF
+      // Сохраняем пустой PDF
       const filename = `WB_Order_Stickers_${timestamp}.pdf`;
       doc.save(filename);
       
-      console.log('PDF с информацией об отсутствии стикеров создан');
+      console.log('Создан пустой PDF-файл стикеров');
       return;
     }
     
-    // Добавляем стикеры на страницы
-    ordersWithStickers.forEach((order, index) => {
+    // Обрабатываем все заказы и добавляем им стикеры
+    orders.forEach((order, index) => {
       // Добавляем новую страницу для каждого стикера кроме первого
       if (index > 0) {
         doc.addPage();
-        
-        // Добавляем только название маркетплейса на каждой странице
-        addTextToPDF(
-          doc,
-          'Wildberries',
-          0,
-          20,
-          { fontSize: 12, align: 'center' }
-        );
       }
       
-      try {
-        // Получаем base64 изображение стикера
-        const imgSrc = getImageSrcFromBase64(order.sticker);
-        
-        // Используем nm_id как артикул и article как название товара
-        const articleId = order.nm_id?.toString() || '';
-        const productName = order.article?.toString() || '';
-        
-        
-        // Добавляем стикер - центрируем на странице
-        // A4 размер: 210x297 мм
-        // Размещаем изображение с размером 80x80 мм в центре страницы
-        doc.addImage(imgSrc, 'PNG', 65, 70, 80, 80);
-        
-      } catch (e) {
-        console.error('Ошибка при добавлении стикера в PDF:', e);
-        addTextToPDF(
-          doc,
-          'Ошибка при добавлении стикера',
-          0,
-          50,
-          { fontSize: 12, align: 'center' }
-        );
-      }
+      // Расчет координат для центрирования стикера на странице
+      const pageWidth = doc.internal.pageSize.getWidth(); // ширина страницы в мм
+      const pageHeight = doc.internal.pageSize.getHeight(); // высота страницы в мм
+      const stickerWidth = 58; // ширина стикера в мм
+      const stickerHeight = 40; // высота стикера в мм
+      
+      // Расчет позиции для центрирования
+      const xPos = (pageWidth - stickerWidth) / 2;
+      const yPos = (pageHeight - stickerHeight) / 2;
+      
+      // Проверяем наличие стикера у заказа
+      if (order.sticker && isBase64Image(order.sticker)) {
+        try {
+          // Получаем base64 изображение стикера
+          const imgSrc = getImageSrcFromBase64(order.sticker);
+          
+          // Добавляем только стикер, центрированный на странице
+          doc.addImage(imgSrc, 'PNG', xPos, yPos, stickerWidth, stickerHeight);
+        } catch (e) {
+          console.error('Ошибка при добавлении стикера в PDF:', e);
+          // Пропускаем страницу для этого заказа, не добавляя заглушку
+        }
+      } 
+      // Если у заказа нет стикера, просто оставляем пустую страницу
     });
     
     // Сохраняем PDF

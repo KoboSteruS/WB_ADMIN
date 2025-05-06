@@ -370,6 +370,7 @@ export interface WbOrdersResponse {
 export interface ChangeStatusRequest {
   orders: (number | string)[];
   status: string;
+  wb_token_id?: number;
 }
 
 /**
