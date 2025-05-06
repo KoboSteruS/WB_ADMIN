@@ -34,8 +34,12 @@ import {
   generateOrdersPDF, 
   generateArticlesSummaryPDF, 
   generateOrdersListPDF, 
-  generateStickersPDF 
+  generateStickersPDF,
+  generateSupplyBarcodePDF
 } from '../../services/pdfGenerationService';
+
+// Импортируем сервис генерации Excel
+import { generateArticlesSummaryExcel } from '../../services/excelGenerationService';
 
 // Импортируем хук выбора заказов
 import { useOrderSelection } from '../../hooks/useOrderSelection';
@@ -343,9 +347,9 @@ export const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) =
 
         setStatusChangeSuccess(true);
         
-        // Если переходим в статус "assembly", скачиваем PDF-файлы
+        // Если переходим в статус "assembly", скачиваем отчеты
         if (nextStatus === 'assembly') {
-        downloadOrderPDFs();
+          downloadOrderReports();
         }
         
         // Обновляем данные заказов
@@ -361,9 +365,9 @@ export const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) =
   };
 
   /**
-   * Скачивание PDF-файлов с данными заказов
+   * Скачивание отчетов о заказах (сводка в Excel, список и стикеры в PDF)
    */
-  const downloadOrderPDFs = () => {
+  const downloadOrderReports = () => {
     const selectedOrdersData = getSelectedOrdersData();
     
     if (selectedOrdersData.length === 0) {
@@ -378,8 +382,25 @@ export const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) =
       return nmIdA.localeCompare(nmIdB);
     });
     
-    // Генерируем PDF с выбранными заказами через сервис
-    generateOrdersPDF(sortedByNmId, selectedLegalEntity || undefined);
+    try {
+      // Шаг 1: Генерируем сводку по артикулам в Excel
+      console.log('Генерация Excel: Сводка по артикулам');
+      generateArticlesSummaryExcel(sortedByNmId, selectedLegalEntity || undefined);
+      
+      // Шаг 2: Генерируем PDF со списком всех заказов
+      console.log('Генерация PDF: Список всех заказов');
+      generateOrdersListPDF(sortedByNmId, selectedLegalEntity || undefined);
+      
+      // Шаг 3: Генерируем PDF со стикерами
+      console.log('Генерация PDF: Наклейки для заказов');
+      generateStickersPDF(sortedByNmId);
+      
+      console.log('Все отчеты успешно сгенерированы');
+      alert('Отчеты успешно сгенерированы и сохранены');
+    } catch (error) {
+      console.error('Ошибка при генерации отчетов:', error);
+      alert(`Произошла ошибка при генерации отчетов: ${error instanceof Error ? (error as Error).message : String(error)}`);
+    }
   };
 
   /**
@@ -438,6 +459,28 @@ export const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) =
       setStatusChangeError('Произошла ошибка при отправке запроса');
     } finally {
       setStatusChangeLoading(false);
+    }
+  };
+
+  /**
+   * Обработчик клика по ID поставки для генерации PDF со штрих-кодом поставки
+   */
+  const handleSupplyIdClick = async (order: WbOrder) => {
+    if (!order.supply_id) {
+      alert('Отсутствует идентификатор поставки');
+      return;
+    }
+
+    if (!order.supply_barcode) {
+      alert('Для данной поставки не найден штрих-код');
+      return;
+    }
+
+    try {
+      await generateSupplyBarcodePDF(order.supply_barcode, order.supply_id);
+    } catch (error) {
+      console.error('Ошибка при генерации PDF со штрих-кодом поставки:', error);
+      alert(`Ошибка при генерации PDF: ${error instanceof Error ? (error as Error).message : String(error)}`);
     }
   };
 
@@ -514,11 +557,11 @@ export const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) =
               <Button
                 variant="outline-success"
                 size="sm"
-                onClick={downloadOrderPDFs}
+                onClick={downloadOrderReports}
                 disabled={selectionCount === 0}
                 className="me-2"
               >
-                <i className="bi bi-file-pdf me-1"></i> Скачать PDF
+                <i className="bi bi-file-earmark me-1"></i> Скачать отчеты
               </Button>
               <Button 
                 variant="primary"
@@ -694,7 +737,20 @@ export const WildberriesOrders: React.FC<WildberriesOrdersProps> = ({ token }) =
                           <td>{order.wb_token || '—'}</td>
                           <td>
                             {order.supply_id 
-                              ? <Badge bg="info">{order.supply_id}</Badge>
+                              ? (
+                                <Button 
+                                  variant="link" 
+                                  className="p-0" 
+                                  style={{textDecoration: 'none'}} 
+                                  onClick={() => handleSupplyIdClick(order)}
+                                  disabled={!order.supply_barcode}
+                                >
+                                  <Badge bg="info">
+                                    {order.supply_id}
+                                    {order.supply_barcode ? <i className="bi bi-file-earmark-pdf ms-1" /> : null}
+                                  </Badge>
+                                </Button>
+                              )
                               : '—'
                             }
                           </td>

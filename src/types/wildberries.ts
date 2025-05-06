@@ -338,6 +338,7 @@ export interface WbOrder {
   sticker?: string;
   wb_token?: number;
   supply_id?: string;
+  supply_barcode?: string;
   [key: string]: any;
 }
 

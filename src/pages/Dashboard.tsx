@@ -36,8 +36,12 @@ import {
   generateOrdersPDF, 
   generateArticlesSummaryPDF, 
   generateOrdersListPDF, 
-  generateStickersPDF 
+  generateStickersPDF,
+  generateSupplyBarcodePDF
 } from '../services/pdfGenerationService';
+
+// Импортируем сервис генерации Excel
+import { generateArticlesSummaryExcel } from '../services/excelGenerationService';
 
 /**
  * Интерфейс для юридического лица
@@ -543,9 +547,9 @@ const Dashboard: React.FC = () => {
       console.log('Результат смены статуса:', result);
       setStatusChangeSuccess(true);
         
-      // Если переходим в статус "assembly", скачиваем PDF-файлы
+      // Если переходим в статус "assembly", скачиваем отчеты
       if (nextStatus === 'assembly') {
-        downloadWbOrderPDFs();
+        downloadWbOrderReports();
       }
         
       // Обновляем данные заказов с небольшой задержкой
@@ -563,9 +567,9 @@ const Dashboard: React.FC = () => {
   };
   
   /**
-   * Скачивание PDF-файлов с данными заказов Wildberries
+   * Скачивание отчетов о заказах Wildberries (сводка в Excel, список и стикеры в PDF)
    */
-  const downloadWbOrderPDFs = () => {
+  const downloadWbOrderReports = () => {
     const selectedOrdersData = getSelectedWbOrdersData();
     
     if (selectedOrdersData.length === 0) {
@@ -580,10 +584,27 @@ const Dashboard: React.FC = () => {
       return nmIdA.localeCompare(nmIdB);
     });
     
-    console.log('Генерация PDF для заказов:', sortedByNmId);
+    console.log('Генерация отчетов для заказов:', sortedByNmId);
     
-    // Генерируем PDF с выбранными заказами через сервис
-    generateOrdersPDF(sortedByNmId, selectedLegalEntity || undefined);
+    try {
+      // Шаг 1: Генерируем сводку по артикулам в Excel
+      console.log('Генерация Excel: Сводка по артикулам');
+      generateArticlesSummaryExcel(sortedByNmId, selectedLegalEntity || undefined);
+      
+      // Шаг 2: Генерируем PDF со списком всех заказов
+      console.log('Генерация PDF: Список всех заказов');
+      generateOrdersListPDF(sortedByNmId, selectedLegalEntity || undefined);
+      
+      // Шаг 3: Генерируем PDF со стикерами
+      console.log('Генерация PDF: Наклейки для заказов');
+      generateStickersPDF(sortedByNmId);
+      
+      console.log('Все отчеты успешно сгенерированы');
+      alert('Отчеты успешно сгенерированы и сохранены');
+    } catch (error) {
+      console.error('Ошибка при генерации отчетов:', error);
+      alert(`Произошла ошибка при генерации отчетов: ${error instanceof Error ? (error as Error).message : String(error)}`);
+    }
   };
   
   /**
@@ -1404,6 +1425,28 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  /**
+   * Обработчик клика по ID поставки для генерации PDF со штрих-кодом поставки
+   */
+  const handleSupplyIdClick = async (order: WbOrder) => {
+    if (!order.supply_id) {
+      alert('Отсутствует идентификатор поставки');
+      return;
+    }
+
+    if (!order.supply_barcode) {
+      alert('Для данной поставки не найден штрих-код');
+      return;
+    }
+
+    try {
+      await generateSupplyBarcodePDF(order.supply_barcode, order.supply_id);
+    } catch (error) {
+      console.error('Ошибка при генерации PDF со штрих-кодом поставки:', error);
+      alert(`Ошибка при генерации PDF: ${error instanceof Error ? (error as Error).message : String(error)}`);
+    }
+  };
+
   return (
     <Container fluid className="dashboard-container">
 
@@ -1597,11 +1640,11 @@ const Dashboard: React.FC = () => {
                   <Button
                     variant="outline-success"
                     size="sm"
-                    onClick={downloadWbOrderPDFs}
+                    onClick={downloadWbOrderReports}
                     disabled={selectedWbOrders.size === 0}
                     className="me-2"
                   >
-                    <i className="bi bi-file-pdf me-1"></i> Скачать PDF
+                    <i className="bi bi-file-earmark me-1"></i> Скачать отчеты
                   </Button>
                   
                   <Button 
@@ -1744,7 +1787,23 @@ const Dashboard: React.FC = () => {
                                 {getStatusText(order.own_status)}
                               </Badge>
                             </td>
-                            <td>{order.supply_id || '—'}</td>
+                            <td>
+                              {order.supply_id 
+                                ? (
+                                  <Button 
+                                    variant="link" 
+                                    className="p-0 text-info" 
+                                    style={{textDecoration: 'none'}} 
+                                    onClick={() => handleSupplyIdClick(order)}
+                                    disabled={!order.supply_barcode}
+                                  >
+                                    {order.supply_id}
+                                    {order.supply_barcode ? <i className="bi bi-file-earmark-pdf ms-1" /> : null}
+                                  </Button>
+                                )
+                                : '—'
+                              }
+                            </td>
                             <td>
                               {order.offices && order.offices.length > 0 
                                 ? order.offices.join(', ') 

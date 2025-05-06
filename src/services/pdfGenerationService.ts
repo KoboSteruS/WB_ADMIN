@@ -7,15 +7,7 @@ import {
   addTextToPDF, 
   addTitleToPDF, 
   addTableToPDF,
-  // Импортируем для возможного использования в будущем
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  createCyrillicPDF,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  addCyrillicText,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  addCyrillicTitle,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  addCyrillicTable
+  loadAndCacheFont
 } from '../utils/pdfUtils';
 import { 
   formatPrice, 
@@ -24,6 +16,36 @@ import {
   isBase64Image, 
   getImageSrcFromBase64 
 } from '../utils/orderUtils';
+import { jsPDF } from 'jspdf';
+
+/**
+ * Создает PDF документ с нестандартным размером страницы
+ * @param width Ширина страницы в мм
+ * @param height Высота страницы в мм
+ */
+const createCustomSizedPDF = async (width: number, height: number): Promise<any> => {
+  try {
+    // Создаем PDF документ с нужными размерами
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: [width, height] // Пользовательский размер в мм
+    }) as any;
+    
+    // Загружаем и получаем шрифт из кэша
+    const base64Font = await loadAndCacheFont();
+    
+    // Добавляем шрифт в PDF
+    doc.addFileToVFS('Roboto-Regular.ttf', base64Font);
+    doc.addFont('Roboto-Regular.ttf', 'Roboto', 'normal');
+    doc.setFont('Roboto');
+    
+    return doc;
+  } catch (error) {
+    console.error('Ошибка при создании PDF с нестандартным размером:', error);
+    throw error;
+  }
+};
 
 /**
  * Генерирует PDF документы для заказов
@@ -283,8 +305,9 @@ export const generateOrdersListPDF = async (
  */
 export const generateStickersPDF = async (orders: WbOrder[]): Promise<void> => {
   try {
-    // Создаем PDF документ с поддержкой кириллицы
-    const doc = await createPDFWithCyrillicSupport();
+    // Увеличиваем ширину стикера, сохраняя пропорции
+    const STICKER_WIDTH = 40; // ширина в мм (увеличена с 58 до 70)
+    const STICKER_HEIGHT = 58; // высота в мм
     
     // Текущий временной штамп для имени файла
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -292,6 +315,13 @@ export const generateStickersPDF = async (orders: WbOrder[]): Promise<void> => {
     // Если нет заказов, создаем пустой PDF
     if (orders.length === 0) {
       console.log('Нет заказов для создания стикеров');
+      
+      // Создаем стандартный PDF
+      const doc = new jsPDF({
+        unit: 'mm',
+        format: [STICKER_WIDTH, STICKER_HEIGHT],
+        orientation: 'portrait'
+      });
       
       // Сохраняем пустой PDF
       const filename = `WB_Order_Stickers_${timestamp}.pdf`;
@@ -301,46 +331,187 @@ export const generateStickersPDF = async (orders: WbOrder[]): Promise<void> => {
       return;
     }
     
-    // Обрабатываем все заказы и добавляем им стикеры
-    orders.forEach((order, index) => {
-      // Добавляем новую страницу для каждого стикера кроме первого
+    // Создаем массив промисов для предварительной обработки изображений
+    const imagePromises = orders
+      .filter(order => order.sticker && isBase64Image(order.sticker))
+      .map(order => {
+        return new Promise<{ order: WbOrder, img: HTMLImageElement }>((resolve, reject) => {
+          try {
+            const imgSrc = getImageSrcFromBase64(order.sticker);
+            const img = new Image();
+            img.crossOrigin = 'Anonymous';
+            
+            img.onload = () => {
+              resolve({ order, img });
+            };
+            
+            img.onerror = (error) => {
+              console.error(`Ошибка загрузки изображения для заказа ${order.order_id}:`, error);
+              reject(error);
+            };
+            
+            img.src = imgSrc;
+          } catch (error) {
+            reject(error);
+          }
+        });
+      });
+
+    // Ждем загрузки всех изображений
+    const loadedImages = await Promise.allSettled(imagePromises);
+    
+    // Создаем PDF документ с указанием точного размера страницы
+    const pdfDoc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: [STICKER_WIDTH, STICKER_HEIGHT],
+      compress: true,
+      hotfixes: ['px_scaling'] // Исправление для масштабирования пикселей
+    });
+    
+    // Обрабатываем каждое загруженное изображение
+    let pageIndex = 0;
+    
+    loadedImages.forEach((result, index) => {
+      // Добавляем новую страницу для каждого стикера, кроме первого
       if (index > 0) {
-        doc.addPage();
+        pdfDoc.addPage([STICKER_WIDTH, STICKER_HEIGHT]);
       }
       
-      // Расчет координат для центрирования стикера на странице
-      const pageWidth = doc.internal.pageSize.getWidth(); // ширина страницы в мм
-      const pageHeight = doc.internal.pageSize.getHeight(); // высота страницы в мм
-      const stickerWidth = 58; // ширина стикера в мм
-      const stickerHeight = 40; // высота стикера в мм
-      
-      // Расчет позиции для центрирования
-      const xPos = (pageWidth - stickerWidth) / 2;
-      const yPos = (pageHeight - stickerHeight) / 2;
-      
-      // Проверяем наличие стикера у заказа
-      if (order.sticker && isBase64Image(order.sticker)) {
+      if (result.status === 'fulfilled') {
+        const { order, img } = result.value;
+        
         try {
-          // Получаем base64 изображение стикера
-          const imgSrc = getImageSrcFromBase64(order.sticker);
+          // Для стикеров WB важнее показать всё изображение, чем сохранить пропорции
+          // Растягиваем изображение на всю страницу
+          pdfDoc.addImage(
+            img, 
+            'PNG', 
+            0, // x - начинаем с левого края
+            0, // y - начинаем с верхнего края
+            STICKER_WIDTH, // используем всю ширину
+            STICKER_HEIGHT // используем всю высоту
+          );
           
-          // Добавляем только стикер, центрированный на странице
-          doc.addImage(imgSrc, 'PNG', xPos, yPos, stickerWidth, stickerHeight);
-        } catch (e) {
-          console.error('Ошибка при добавлении стикера в PDF:', e);
-          // Пропускаем страницу для этого заказа, не добавляя заглушку
+          pageIndex++;
+        } catch (error) {
+          console.error(`Ошибка при добавлении стикера для заказа ${order.order_id}:`, error);
+          pdfDoc.setFontSize(8);
+          pdfDoc.text(`Ошибка стикера: ${order.order_id || 'Нет ID'}`, 5, 20);
         }
-      } 
-      // Если у заказа нет стикера, просто оставляем пустую страницу
+      } else {
+        // В случае ошибки загрузки изображения, добавляем текст об ошибке
+        pdfDoc.setFontSize(8);
+        pdfDoc.text('Ошибка загрузки стикера', 5, 20);
+      }
+    });
+    
+    // Обрабатываем заказы, у которых нет стикеров
+    const ordersWithoutStickers = orders.filter(order => !order.sticker || !isBase64Image(order.sticker));
+    
+    ordersWithoutStickers.forEach((order, index) => {
+      // Добавляем новую страницу, если уже есть страницы
+      if (pageIndex > 0 || index > 0) {
+        pdfDoc.addPage([STICKER_WIDTH, STICKER_HEIGHT]);
+      }
+      
+      // Добавляем текст о том, что стикер отсутствует
+      pdfDoc.setFontSize(8);
+      pdfDoc.text(`Нет стикера для заказа: ${order.order_id || 'Нет ID'}`, 5, 20);
+      
+      pageIndex++;
     });
     
     // Сохраняем PDF
     const filename = `WB_Order_Stickers_${timestamp}.pdf`;
-    doc.save(filename);
+    pdfDoc.save(filename);
+    console.log(`PDF со стикерами успешно создан: ${filename}, страниц: ${pageIndex}`);
     
-    console.log('PDF со стикерами успешно создан');
   } catch (error) {
-    console.error('Ошибка при создании PDF:', error);
-    alert('Произошла ошибка при создании PDF. Подробности в консоли.');
+    console.error('Ошибка при создании PDF со стикерами:', error);
+    alert(`Произошла ошибка при создании PDF со стикерами: ${error instanceof Error ? (error as Error).message : String(error)}`);
+  }
+};
+
+/**
+ * Генерация PDF со штрих-кодом поставки
+ * @param supplyBarcode Base64-строка штрих-кода поставки
+ * @param supplyId ID поставки для отображения
+ */
+export const generateSupplyBarcodePDF = async (supplyBarcode: string, supplyId: string): Promise<void> => {
+  try {
+    if (!supplyBarcode || !isBase64Image(supplyBarcode)) {
+      alert('Штрих-код поставки отсутствует или некорректен');
+      return;
+    }
+    
+    // Используем стандартный размер A4
+    const PDF_WIDTH = 210; // ширина A4 в мм
+    const PDF_HEIGHT = 297; // высота A4 в мм
+    
+    // Текущий временной штамп для имени файла
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    
+    // Создаем PDF документ с заданным размером
+    const pdfDoc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4', // Используем стандартный формат A4
+      compress: true
+    });
+    
+    try {
+      // Создаем изображение из base64
+      const img = new Image();
+      img.src = getImageSrcFromBase64(supplyBarcode);
+      
+      // Ждем загрузки изображения
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = (error) => reject(error);
+      });
+      
+      // Определяем размеры для добавления изображения в PDF
+      const maxWidth = PDF_WIDTH - 40; // отступы по 20мм с каждой стороны
+      const maxHeight = PDF_HEIGHT - 80; // оставляем место для текста
+      
+      // Сохраняем соотношение сторон
+      const imgRatio = img.width / img.height;
+      let drawWidth = maxWidth;
+      let drawHeight = drawWidth / imgRatio;
+      
+      // Если высота выходит за пределы, корректируем размеры
+      if (drawHeight > maxHeight) {
+        drawHeight = maxHeight;
+        drawWidth = drawHeight * imgRatio;
+      }
+      
+      // Центрируем изображение
+      const xOffset = (PDF_WIDTH - drawWidth) / 2;
+      const yOffset = 50; // Отступ сверху для заголовка
+      
+      // Добавляем заголовок
+      pdfDoc.setFont('helvetica', 'bold');
+      pdfDoc.setFontSize(24);
+      pdfDoc.text(`Поставка: ${supplyId}`, PDF_WIDTH/2, 30, { align: 'center' });
+      
+      // Добавляем штрих-код
+      pdfDoc.addImage(img, 'PNG', xOffset, yOffset, drawWidth, drawHeight);
+      
+      // Добавляем текст внизу
+      pdfDoc.setFontSize(14);
+      pdfDoc.text('Wildberries Supply Barcode', PDF_WIDTH/2, PDF_HEIGHT - 20, { align: 'center' });
+      
+      // Сохраняем PDF
+      const filename = `WB_Supply_${supplyId}_${timestamp}.pdf`;
+      pdfDoc.save(filename);
+      console.log(`PDF со штрих-кодом поставки успешно создан: ${filename}`);
+    } catch (error) {
+      console.error('Ошибка при добавлении штрих-кода в PDF:', error);
+      alert(`Ошибка при создании PDF со штрих-кодом: ${error instanceof Error ? (error as Error).message : String(error)}`);
+    }
+  } catch (error) {
+    console.error('Ошибка при создании PDF со штрих-кодом поставки:', error);
+    alert(`Произошла ошибка при создании PDF: ${error instanceof Error ? (error as Error).message : String(error)}`);
   }
 }; 
