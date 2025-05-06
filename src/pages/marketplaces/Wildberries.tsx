@@ -712,14 +712,6 @@ const Wildberries: React.FC = () => {
 
   return (
     <Container fluid className="py-3">
-      <Breadcrumb
-        items={[
-          { label: 'Главная', path: '/' },
-          { label: 'Настройки маркетплейсов', path: '/marketplace-settings' },
-          { label: 'Wildberries', active: true }
-        ]}
-      />
-
       <Row className="mb-4">
         <Col>
           <div className="d-flex justify-content-between align-items-center mb-4">

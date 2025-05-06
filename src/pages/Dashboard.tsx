@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, ReactNode } from 'react';
 import { Container, Row, Col, Alert, Table, Button, Card } from 'react-bootstrap';
+import Pagination from 'react-bootstrap/Pagination';
 import Spinner from 'react-bootstrap/Spinner';
 import { useNavigate } from 'react-router-dom';
 import './Dashboard.css';
@@ -14,7 +15,8 @@ import {
   fetchWbOrders, 
   changeOrderStatus as changeWbOrderStatus, 
   addWbToken, 
-  requestShipping 
+  requestShipping,
+  addToSupply
 } from '../services/wildberriesApi';
 import { 
   fetchOzonOrders, 
@@ -62,6 +64,11 @@ const Dashboard: React.FC = () => {
   const [wbOrdersError, setWbOrdersError] = useState<string | null>(null);
   const [selectedWbOrders, setSelectedWbOrders] = useState<Set<number | string>>(new Set());
   const [selectAllWb, setSelectAllWb] = useState<boolean>(false);
+  const [wbSortColumn, setWbSortColumn] = useState<string | null>(null);
+  const [wbSortDirection, setWbSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [wbCurrentPage, setWbCurrentPage] = useState<number>(1);
+  const [wbItemsPerPage] = useState<number>(25);
+  const [wbStatusConfirm, setWbStatusConfirm] = useState<boolean>(false);
   
   // Состояния для Ozon
   const [ozonOrders, setOzonOrders] = useState<OzonOrder[]>([]);
@@ -69,6 +76,10 @@ const Dashboard: React.FC = () => {
   const [ozonOrdersError, setOzonOrdersError] = useState<string | null>(null);
   const [selectedOzonOrders, setSelectedOzonOrders] = useState<Set<number | string>>(new Set());
   const [selectAllOzon, setSelectAllOzon] = useState<boolean>(false);
+  const [ozonSortColumn, setOzonSortColumn] = useState<string | null>(null);
+  const [ozonSortDirection, setOzonSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [ozonCurrentPage, setOzonCurrentPage] = useState<number>(1);
+  const [ozonItemsPerPage] = useState<number>(25);
   
   // Состояния для Yandex Market
   const [ymOrders, setYmOrders] = useState<YandexMarketOrder[]>([]);
@@ -76,11 +87,18 @@ const Dashboard: React.FC = () => {
   const [ymOrdersError, setYmOrdersError] = useState<string | null>(null);
   const [selectedYmOrders, setSelectedYmOrders] = useState<Set<number | string>>(new Set());
   const [selectAllYm, setSelectAllYm] = useState<boolean>(false);
+  const [ymSortColumn, setYmSortColumn] = useState<string | null>(null);
+  const [ymSortDirection, setYmSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [ymCurrentPage, setYmCurrentPage] = useState<number>(1);
+  const [ymItemsPerPage] = useState<number>(25);
 
   // Состояния для обработки статусов
   const [statusChangeLoading, setStatusChangeLoading] = useState<boolean>(false);
   const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
   const [statusChangeSuccess, setStatusChangeSuccess] = useState<boolean>(false);
+
+  // Состояние для отображения только выбранного юридического лица
+  const [showAllLegalEntities, setShowAllLegalEntities] = useState<boolean>(true);
 
   /**
    * Загрузка списка юридических лиц с сервера
@@ -122,15 +140,16 @@ const Dashboard: React.FC = () => {
   /**
    * Загрузка заказов Wildberries для выбранного юр. лица
    */
-  const loadWildberriesOrders = async (entity: LegalEntity) => {
+  const loadWildberriesOrders = async (entity: LegalEntity, statusWbConfirm: boolean = false) => {
     if (!entity || !entity.id) return;
     
     setWbOrdersLoading(true);
     setWbOrdersError(null);
     setSelectedLegalEntity(entity);
+    setWbStatusConfirm(statusWbConfirm);
     
     try {
-      const ordersData = await fetchWbOrders(entity.id);
+      const ordersData = await fetchWbOrders(entity.id, statusWbConfirm);
       setWbOrders(ordersData);
     } catch (error) {
       console.error('Ошибка при загрузке заказов Wildberries:', error);
@@ -198,12 +217,20 @@ const Dashboard: React.FC = () => {
    * Обработчик выбора маркетплейса для юр. лица
    */
   const handleSelectMarketplace = (marketplace: string, entity: LegalEntity) => {
+    // Сбрасываем пагинацию при загрузке нового маркетплейса
+    setWbCurrentPage(1);
+    setOzonCurrentPage(1);
+    setYmCurrentPage(1);
+    
     // Сохраняем ID и данные юр. лица в localStorage для использования в других компонентах
     localStorage.setItem('selectedLegalEntityId', entity.id);
     localStorage.setItem('selectedLegalEntityData', JSON.stringify(entity));
     
     // Устанавливаем выбранный маркетплейс
     setSelectedMarketplace(marketplace);
+    
+    // Скрываем остальные юридические лица
+    setShowAllLegalEntities(false);
     
     // Загружаем заказы выбранного маркетплейса
     if (marketplace === 'wildberries') {
@@ -234,7 +261,8 @@ const Dashboard: React.FC = () => {
     if (selectAllWb) {
       setSelectedWbOrders(new Set());
     } else {
-      const allOrderIds = wbOrders.map(order => order.id || order.order_id || '');
+      const currentPageOrders = getCurrentPageWbOrders();
+      const allOrderIds = currentPageOrders.map(order => order.id || order.order_id || '');
       setSelectedWbOrders(new Set(allOrderIds));
     }
     setSelectAllWb(!selectAllWb);
@@ -259,7 +287,8 @@ const Dashboard: React.FC = () => {
     if (selectAllOzon) {
       setSelectedOzonOrders(new Set());
     } else {
-      const allOrderIds = ozonOrders.map(order => order.id || order.order_id || '');
+      const currentPageOrders = getCurrentPageOzonOrders();
+      const allOrderIds = currentPageOrders.map(order => order.id || order.order_id || '');
       setSelectedOzonOrders(new Set(allOrderIds));
     }
     setSelectAllOzon(!selectAllOzon);
@@ -284,7 +313,8 @@ const Dashboard: React.FC = () => {
     if (selectAllYm) {
       setSelectedYmOrders(new Set());
     } else {
-      const allOrderIds = ymOrders.map(order => order.id || order.order_id || '');
+      const currentPageOrders = getCurrentPageYmOrders();
+      const allOrderIds = currentPageOrders.map(order => order.id || order.order_id || '');
       setSelectedYmOrders(new Set(allOrderIds));
     }
     setSelectAllYm(!selectAllYm);
@@ -298,7 +328,7 @@ const Dashboard: React.FC = () => {
   };
 
   /**
-   * Очистка выбранного маркетплейса
+   * Очистка выбранного маркетплейса и возврат к полному списку юр. лиц
    */
   const handleClearSelectedMarketplace = () => {
     setSelectedMarketplace(null);
@@ -308,6 +338,9 @@ const Dashboard: React.FC = () => {
     setSelectAllOzon(false);
     setSelectedYmOrders(new Set());
     setSelectAllYm(false);
+    
+    // Показываем все юридические лица
+    setShowAllLegalEntities(true);
   };
 
   /**
@@ -389,6 +422,18 @@ const Dashboard: React.FC = () => {
       return;
     }
 
+    // Проверяем, что у всех заказов один и тот же собственный статус
+    const selectedOrdersData = getSelectedWbOrdersData();
+    const statuses = new Set<string>();
+    selectedOrdersData.forEach(order => {
+      statuses.add((order.own_status || '').toLowerCase());
+    });
+    
+    if (statuses.size > 1) {
+      setStatusChangeError('Нельзя работать с заказами, имеющими разные собственные статусы');
+      return;
+    }
+
     // Определяем текущий статус выбранных заказов
     const currentStatus = getSelectedWbOrdersStatus();
     // Определяем следующий статус
@@ -467,6 +512,17 @@ const Dashboard: React.FC = () => {
 
     // Получаем выбранные заказы
     const selectedOrdersData = getSelectedWbOrdersData();
+    
+    // Проверяем, что у всех заказов один и тот же собственный статус
+    const statuses = new Set<string>();
+    selectedOrdersData.forEach(order => {
+      statuses.add((order.own_status || '').toLowerCase());
+    });
+    
+    if (statuses.size > 1) {
+      setStatusChangeError('Нельзя работать с заказами, имеющими разные собственные статусы');
+      return;
+    }
     
     if (selectedOrdersData.length === 0) {
       alert('Не удалось получить данные выбранных заказов');
@@ -795,19 +851,490 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  /**
+   * Обработчик сортировки заказов Wildberries
+   */
+  const handleWbSort = (column: string) => {
+    // Если выбран тот же столбец, меняем направление сортировки
+    if (wbSortColumn === column) {
+      setWbSortDirection(wbSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Если выбран новый столбец, устанавливаем его и сортировку по возрастанию
+      setWbSortColumn(column);
+      setWbSortDirection('asc');
+    }
+  };
+
+  /**
+   * Обработчик сортировки заказов Ozon
+   */
+  const handleOzonSort = (column: string) => {
+    if (ozonSortColumn === column) {
+      setOzonSortDirection(ozonSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setOzonSortColumn(column);
+      setOzonSortDirection('asc');
+    }
+  };
+
+  /**
+   * Обработчик сортировки заказов Yandex Market
+   */
+  const handleYmSort = (column: string) => {
+    if (ymSortColumn === column) {
+      setYmSortDirection(ymSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setYmSortColumn(column);
+      setYmSortDirection('asc');
+    }
+  };
+
+  /**
+   * Функция для получения отсортированных заказов Wildberries
+   */
+  const getSortedWbOrders = () => {
+    if (!wbSortColumn) return wbOrders;
+
+    return [...wbOrders].sort((a, b) => {
+      // Проверка на сортировку по дате
+      if (wbSortColumn === 'created_at') {
+        const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        
+        return wbSortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+      }
+      
+      // Обработка числовых полей
+      if (wbSortColumn === 'sale_price' || wbSortColumn === 'nm_id') {
+        const numA = parseFloat(String(a[wbSortColumn as keyof WbOrder] || 0));
+        const numB = parseFloat(String(b[wbSortColumn as keyof WbOrder] || 0));
+        
+        return wbSortDirection === 'asc' ? numA - numB : numB - numA;
+      }
+      
+      // Для текстовых полей
+      let valueA = a[wbSortColumn as keyof WbOrder];
+      let valueB = b[wbSortColumn as keyof WbOrder];
+      
+      // Обработка значений null или undefined
+      if (valueA === null || valueA === undefined) valueA = '';
+      if (valueB === null || valueB === undefined) valueB = '';
+      
+      // Преобразование к строке для сравнения
+      const strA = String(valueA).toLowerCase();
+      const strB = String(valueB).toLowerCase();
+
+      // Сортировка
+      if (wbSortDirection === 'asc') {
+        return strA.localeCompare(strB);
+      } else {
+        return strB.localeCompare(strA);
+      }
+    });
+  };
+
+  /**
+   * Функция для получения заказов Wildberries текущей страницы
+   */
+  const getCurrentPageWbOrders = () => {
+    const sortedOrders = getSortedWbOrders();
+    const indexOfLastItem = wbCurrentPage * wbItemsPerPage;
+    const indexOfFirstItem = indexOfLastItem - wbItemsPerPage;
+    return sortedOrders.slice(indexOfFirstItem, indexOfLastItem);
+  };
+
+  /**
+   * Функция для получения отсортированных заказов Ozon
+   */
+  const getSortedOzonOrders = () => {
+    if (!ozonSortColumn) return ozonOrders;
+
+    return [...ozonOrders].sort((a, b) => {
+      // Проверка на сортировку по дате
+      if (ozonSortColumn === 'created_at' || ozonSortColumn === 'in_process_at' || ozonSortColumn === 'created_date') {
+        // Находим первое непустое поле с датой
+        const getDateValue = (order: OzonOrder) => {
+          if (ozonSortColumn === 'created_at' && order.created_at) {
+            return new Date(order.created_at).getTime();
+          } else if (ozonSortColumn === 'in_process_at' && order.in_process_at) {
+            return new Date(order.in_process_at).getTime();
+          } else if (order.created_date) {
+            return new Date(order.created_date).getTime();
+          }
+          return 0;
+        };
+        
+        const dateA = getDateValue(a);
+        const dateB = getDateValue(b);
+        
+        return ozonSortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+      }
+      
+      // Обработка числовых полей
+      if (ozonSortColumn === 'price' || ozonSortColumn === 'sale_price') {
+        // Берем первое непустое значение
+        const getPriceValue = (order: OzonOrder) => {
+          if (ozonSortColumn === 'price' && order.price !== undefined) {
+            return parseFloat(String(order.price || 0));
+          }
+          return parseFloat(String(order.sale_price || 0));
+        };
+        
+        const numA = getPriceValue(a);
+        const numB = getPriceValue(b);
+        
+        return ozonSortDirection === 'asc' ? numA - numB : numB - numA;
+      }
+      
+      // Для нескольких возможных полей с тем же значением
+      let valueA, valueB;
+      
+      // Обработка полей с несколькими возможными именами
+      if (ozonSortColumn === 'product_name') {
+        valueA = a.product_name || a.name || '';
+        valueB = b.product_name || b.name || '';
+      } else if (ozonSortColumn === 'sku') {
+        valueA = a.sku || a.offer_id || '';
+        valueB = b.sku || b.offer_id || '';
+      } else if (ozonSortColumn === 'city') {
+        valueA = a.city || (a.delivery_method?.warehouse ? a.delivery_method.warehouse.split(',')[0] : '');
+        valueB = b.city || (b.delivery_method?.warehouse ? b.delivery_method.warehouse.split(',')[0] : '');
+      } else if (ozonSortColumn === 'delivery_type') {
+        valueA = a.delivery_type || (a.delivery_method ? a.delivery_method.name : '');
+        valueB = b.delivery_type || (b.delivery_method ? b.delivery_method.name : '');
+      } else {
+        // Для остальных полей
+        valueA = a[ozonSortColumn as keyof OzonOrder];
+        valueB = b[ozonSortColumn as keyof OzonOrder];
+      }
+      
+      // Обработка значений null или undefined
+      if (valueA === null || valueA === undefined) valueA = '';
+      if (valueB === null || valueB === undefined) valueB = '';
+      
+      // Преобразование к строке для сравнения
+      const strA = String(valueA).toLowerCase();
+      const strB = String(valueB).toLowerCase();
+      
+      // Сортировка
+      if (ozonSortDirection === 'asc') {
+        return strA.localeCompare(strB);
+      } else {
+        return strB.localeCompare(strA);
+      }
+    });
+  };
+
+  /**
+   * Функция для получения заказов Ozon текущей страницы
+   */
+  const getCurrentPageOzonOrders = () => {
+    const sortedOrders = getSortedOzonOrders();
+    const indexOfLastItem = ozonCurrentPage * ozonItemsPerPage;
+    const indexOfFirstItem = indexOfLastItem - ozonItemsPerPage;
+    return sortedOrders.slice(indexOfFirstItem, indexOfLastItem);
+  };
+
+  /**
+   * Функция для получения отсортированных заказов Yandex Market
+   */
+  const getSortedYmOrders = () => {
+    if (!ymSortColumn) return ymOrders;
+
+    return [...ymOrders].sort((a, b) => {
+      // Проверка на сортировку по дате
+      if (ymSortColumn === 'created_at' || ymSortColumn === 'created_date') {
+        const dateA = a[ymSortColumn as keyof YandexMarketOrder] 
+          ? new Date(String(a[ymSortColumn as keyof YandexMarketOrder])).getTime() 
+          : 0;
+        const dateB = b[ymSortColumn as keyof YandexMarketOrder] 
+          ? new Date(String(b[ymSortColumn as keyof YandexMarketOrder])).getTime() 
+          : 0;
+        
+        return ymSortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+      }
+      
+      // Обработка числовых полей
+      if (ymSortColumn === 'price' || ymSortColumn === 'total_price') {
+        const getPriceValue = (order: YandexMarketOrder) => {
+          if (ymSortColumn === 'price' && order.price !== undefined) {
+            return parseFloat(String(order.price || 0));
+          }
+          return parseFloat(String(order.total_price || 0));
+        };
+        
+        const numA = getPriceValue(a);
+        const numB = getPriceValue(b);
+        
+        return ymSortDirection === 'asc' ? numA - numB : numB - numA;
+      }
+      
+      // Для нескольких возможных полей с тем же значением
+      let valueA, valueB;
+      
+      // Обработка полей с несколькими возможными именами
+      if (ymSortColumn === 'name') {
+        valueA = a.name || a.product_name || '';
+        valueB = b.name || b.product_name || '';
+      } else if (ymSortColumn === 'shop_sku') {
+        valueA = a.shop_sku || a.offer_id || '';
+        valueB = b.shop_sku || b.offer_id || '';
+      } else if (ymSortColumn === 'region') {
+        valueA = a.region || a.delivery_region || '';
+        valueB = b.region || b.delivery_region || '';
+      } else {
+        // Для остальных полей
+        valueA = a[ymSortColumn as keyof YandexMarketOrder];
+        valueB = b[ymSortColumn as keyof YandexMarketOrder];
+      }
+      
+      // Обработка значений null или undefined
+      if (valueA === null || valueA === undefined) valueA = '';
+      if (valueB === null || valueB === undefined) valueB = '';
+      
+      // Преобразование к строке для сравнения
+      const strA = String(valueA).toLowerCase();
+      const strB = String(valueB).toLowerCase();
+      
+      // Сортировка
+      if (ymSortDirection === 'asc') {
+        return strA.localeCompare(strB);
+      } else {
+        return strB.localeCompare(strA);
+      }
+    });
+  };
+
+  /**
+   * Функция для получения заказов Yandex Market текущей страницы
+   */
+  const getCurrentPageYmOrders = () => {
+    const sortedOrders = getSortedYmOrders();
+    const indexOfLastItem = ymCurrentPage * ymItemsPerPage;
+    const indexOfFirstItem = indexOfLastItem - ymItemsPerPage;
+    return sortedOrders.slice(indexOfFirstItem, indexOfLastItem);
+  };
+
+  /**
+   * Компонент заголовка столбца с сортировкой
+   */
+  const SortableColumnHeader = ({ 
+    column, 
+    title, 
+    currentSortColumn, 
+    currentSortDirection, 
+    onSort,
+    isDateColumn = false
+  }: { 
+    column: string; 
+    title: string; 
+    currentSortColumn: string | null; 
+    currentSortDirection: 'asc' | 'desc'; 
+    onSort: (column: string) => void;
+    isDateColumn?: boolean;
+  }) => (
+    <th onClick={() => onSort(column)} style={{ cursor: 'pointer' }}>
+      <div className="d-flex align-items-center justify-content-between">
+        <span>{title}</span>
+        <span>
+          {currentSortColumn === column ? (
+            <i className={`bi bi-sort-${isDateColumn ? 'numeric-' : ''}${currentSortDirection === 'asc' ? 'down' : 'up'} ms-1`}></i>
+          ) : (
+            <i className={`bi bi-filter${isDateColumn ? '-square' : ''} ms-1 text-muted`}></i>
+          )}
+        </span>
+      </div>
+    </th>
+  );
+
+  /**
+   * Компонент пагинации для отображения страниц
+   */
+  const PaginationComponent = ({ 
+    currentPage, 
+    totalPages, 
+    onPageChange 
+  }: { 
+    currentPage: number; 
+    totalPages: number; 
+    onPageChange: (page: number) => void;
+  }) => {
+    // Определяем, сколько страниц показывать до и после текущей
+    const pagesToShow = 2;
+    let startPage = Math.max(1, currentPage - pagesToShow);
+    let endPage = Math.min(totalPages, currentPage + pagesToShow);
+
+    // Если меньше страниц показано слева, добавляем справа
+    if (currentPage - startPage < pagesToShow) {
+      endPage = Math.min(totalPages, endPage + (pagesToShow - (currentPage - startPage)));
+    }
+
+    // Если меньше страниц показано справа, добавляем слева
+    if (endPage - currentPage < pagesToShow) {
+      startPage = Math.max(1, startPage - (pagesToShow - (endPage - currentPage)));
+    }
+
+    // Создаем массив страниц для отображения
+    const pages = Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i);
+
+    return (
+      <div className="d-flex justify-content-between align-items-center my-3">
+        <div>
+          <span className="text-muted">
+            Страница {currentPage} из {totalPages}
+          </span>
+        </div>
+        <Pagination>
+          <Pagination.First
+            onClick={() => onPageChange(1)}
+            disabled={currentPage === 1}
+          />
+          <Pagination.Prev
+            onClick={() => onPageChange(currentPage - 1)}
+            disabled={currentPage === 1}
+          />
+          
+          {startPage > 1 && (
+            <>
+              <Pagination.Item onClick={() => onPageChange(1)}>1</Pagination.Item>
+              {startPage > 2 && <Pagination.Ellipsis />}
+            </>
+          )}
+          
+          {pages.map(page => (
+            <Pagination.Item
+              key={page}
+              active={page === currentPage}
+              onClick={() => onPageChange(page)}
+            >
+              {page}
+            </Pagination.Item>
+          ))}
+          
+          {endPage < totalPages && (
+            <>
+              {endPage < totalPages - 1 && <Pagination.Ellipsis />}
+              <Pagination.Item onClick={() => onPageChange(totalPages)}>
+                {totalPages}
+              </Pagination.Item>
+            </>
+          )}
+          
+          <Pagination.Next
+            onClick={() => onPageChange(currentPage + 1)}
+            disabled={currentPage === totalPages}
+          />
+          <Pagination.Last
+            onClick={() => onPageChange(totalPages)}
+            disabled={currentPage === totalPages}
+          />
+        </Pagination>
+      </div>
+    );
+  };
+
+  /**
+   * Обработчик добавления заказов Wildberries в поставку
+   */
+  const handleAddToSupply = async () => {
+    if (selectedWbOrders.size === 0) {
+      setStatusChangeError('Выберите хотя бы один заказ для добавления в поставку');
+      return;
+    }
+
+    // Получаем выбранные заказы
+    const selectedOrdersData = getSelectedWbOrdersData();
+    
+    // Проверяем, что у всех заказов один и тот же собственный статус
+    const statuses = new Set<string>();
+    selectedOrdersData.forEach(order => {
+      statuses.add((order.own_status || '').toLowerCase());
+    });
+    
+    if (statuses.size > 1) {
+      setStatusChangeError('Нельзя работать с заказами, имеющими разные собственные статусы');
+      return;
+    }
+    
+    // Проверяем, есть ли заказы со статусом confirm
+    const hasConfirmStatus = selectedOrdersData.some(order => 
+      (order.wb_status || '').toLowerCase() === 'confirm' || 
+      (order.own_status || '').toLowerCase() === 'confirm'
+    );
+    
+    if (hasConfirmStatus) {
+      setStatusChangeError('Нельзя отправлять в поставку заказы со статусом confirm');
+      return;
+    }
+
+    setStatusChangeLoading(true);
+    setStatusChangeError(null);
+    setStatusChangeSuccess(false);
+
+    try {
+      // Получаем ID заказов
+      const orderIds = Array.from(selectedWbOrders).map(orderId => {
+        const order = wbOrders.find(o => 
+          (o.id || o.order_id) === orderId
+        );
+        return order?.order_id || orderId;
+      });
+
+      // Получаем wb_token_id из первого заказа (или используем 1 по умолчанию)
+      let wb_token_id = 1;
+      const firstSelectedOrder = wbOrders.find(order => 
+        selectedWbOrders.has(order.id || order.order_id || '')
+      );
+      if (firstSelectedOrder && firstSelectedOrder.wb_token) {
+        wb_token_id = firstSelectedOrder.wb_token;
+      }
+
+      // Отправляем запрос на добавление в поставку
+      const result = await addToSupply(orderIds, wb_token_id);
+
+      setStatusChangeSuccess(true);
+      alert(`Заказы успешно добавлены в поставку. ${result.response || result.message || ''}`);
+      
+      // Обновляем данные заказов
+      setTimeout(() => {
+        if (selectedLegalEntity) {
+          loadWildberriesOrders(selectedLegalEntity);
+        }
+      }, 1500);
+    } catch (error) {
+      console.error('Ошибка запроса:', error);
+      setStatusChangeError('Произошла ошибка при добавлении заказов в поставку');
+      alert(`Ошибка: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setStatusChangeLoading(false);
+    }
+  };
+
+  /**
+   * Обработчик переключения отображения всех заказов Wildberries
+   */
+  const handleToggleWbOrders = () => {
+    if (selectedLegalEntity) {
+      loadWildberriesOrders(selectedLegalEntity, !wbStatusConfirm);
+    }
+  };
+
   return (
     <Container fluid className="dashboard-container">
-      <Row className="mb-4">
-        <Col>
-          <h1 className="page-title">Панель управления</h1>
-          <p className="text-muted">Обзор ваших маркетплейсов и продаж</p>
-        </Col>
-      </Row>
 
       <Row className="mb-4">
         <Col>
           <div className="d-flex justify-content-between align-items-center mb-3">
             <h2 className="section-title mb-0">Юридические лица</h2>
+            {!showAllLegalEntities && (
+              <Button 
+                variant="outline-secondary" 
+                size="sm" 
+                onClick={() => setShowAllLegalEntities(true)}
+              >
+                <i className="bi bi-list me-1"></i>Показать все юр. лица
+              </Button>
+            )}
           </div>
           
           {loading ? (
@@ -837,42 +1364,44 @@ const Dashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {legalEntities.map((entity) => (
-                  <tr key={entity.id}>
-                    <td>{entity.id}</td>
-                    <td>{entity.title}</td>
-                    <td>{entity.inn}</td>
-                    <td>
-                      <div className="btn-group" style={{ gap: '15px' }}>
-                      <Button 
-                        variant="primary" 
-                        size="sm"
-                        onClick={() => handleSelectMarketplace('wildberries', entity)}
-                        style={{ backgroundColor: 'purple', border: '2px solid purple'}}
-                      >
-                        <i className="bi bi-box me-1"></i>
-                        Wildberries
-                      </Button>
+                {legalEntities
+                  .filter(entity => showAllLegalEntities || (selectedLegalEntity && entity.id === selectedLegalEntity.id))
+                  .map((entity) => (
+                    <tr key={entity.id}>
+                      <td>{entity.id}</td>
+                      <td>{entity.title}</td>
+                      <td>{entity.inn}</td>
+                      <td>
+                        <div className="btn-group" style={{ gap: '15px' }}>
                         <Button 
                           variant="primary" 
                           size="sm"
-                          onClick={() => handleSelectMarketplace('ozon', entity)}
+                          onClick={() => handleSelectMarketplace('wildberries', entity)}
+                          style={{ backgroundColor: 'purple', border: '2px solid purple'}}
                         >
-                          <i className="bi bi-box-arrow-right me-1"></i>
-                          OZON
+                          <i className="bi bi-box me-1"></i>
+                          Wildberries
                         </Button>
-                        <Button 
-                          variant="warning" 
-                          size="sm"
-                          onClick={() => handleSelectMarketplace('yandex-market', entity)}
-                        >
-                          <i className="bi bi-box-seam me-1"></i>
-                          YandexMarket
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          <Button 
+                            variant="primary" 
+                            size="sm"
+                            onClick={() => handleSelectMarketplace('ozon', entity)}
+                          >
+                            <i className="bi bi-box-arrow-right me-1"></i>
+                            OZON
+                          </Button>
+                          <Button 
+                            variant="warning" 
+                            size="sm"
+                            onClick={() => handleSelectMarketplace('yandex-market', entity)}
+                          >
+                            <i className="bi bi-box-seam me-1"></i>
+                            YandexMarket
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </Table>
           )}
@@ -896,6 +1425,7 @@ const Dashboard: React.FC = () => {
                     variant="outline-secondary" 
                     size="sm" 
                     onClick={handleClearSelectedMarketplace}
+                    className="ms-2"
                   >
                     <i className="bi bi-x-circle me-1"></i>Скрыть
                   </Button>
@@ -960,6 +1490,26 @@ const Dashboard: React.FC = () => {
                   )}
                   
                   <Button
+                    variant="info"
+                    size="sm"
+                    onClick={handleAddToSupply}
+                    disabled={selectedWbOrders.size === 0 || statusChangeLoading}
+                    className="me-2"
+                  >
+                    {statusChangeLoading ? (
+                      <>
+                        <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
+                        Добавление в поставку...
+                      </>
+                    ) : (
+                      <>
+                        <i className="bi bi-box-seam me-2"></i>
+                        Добавить в поставку ({selectedWbOrders.size})
+                      </>
+                    )}
+                  </Button>
+                  
+                  <Button
                     variant="outline-success"
                     size="sm"
                     onClick={downloadWbOrderPDFs}
@@ -976,6 +1526,15 @@ const Dashboard: React.FC = () => {
                     className="me-2"
                   >
                     <i className="bi bi-arrow-repeat me-1"></i> Обновить
+                  </Button>
+
+                  <Button 
+                    variant={wbStatusConfirm ? "outline-info" : "outline-warning"} 
+                    size="sm" 
+                    onClick={handleToggleWbOrders}
+                  >
+                    <i className="bi bi-eye me-1"></i> 
+                    {wbStatusConfirm ? "Показать все заказы" : "Показать заказы с подтверждением"}
                   </Button>
                 </div>
                 
@@ -1007,21 +1566,76 @@ const Dashboard: React.FC = () => {
                               aria-label="Выбрать все заказы"
                             />
                           </th>
-                          <th>ID заказа</th>
-                          <th>Дата создания</th>
-                          <th>Название</th>
-                          <th>Артикул</th>
-                          <th>Статус WB</th>
-                          <th>Собственный статус</th>
-                          <th>Supply ID</th>
+                          <SortableColumnHeader
+                            column="order_id"
+                            title="ID заказа"
+                            currentSortColumn={wbSortColumn}
+                            currentSortDirection={wbSortDirection}
+                            onSort={handleWbSort}
+                          />
+                          <SortableColumnHeader
+                            column="created_at"
+                            title="Дата создания"
+                            currentSortColumn={wbSortColumn}
+                            currentSortDirection={wbSortDirection}
+                            onSort={handleWbSort}
+                            isDateColumn={true}
+                          />
+                          <SortableColumnHeader
+                            column="article"
+                            title="Название"
+                            currentSortColumn={wbSortColumn}
+                            currentSortDirection={wbSortDirection}
+                            onSort={handleWbSort}
+                          />
+                          <SortableColumnHeader
+                            column="nm_id"
+                            title="Артикул"
+                            currentSortColumn={wbSortColumn}
+                            currentSortDirection={wbSortDirection}
+                            onSort={handleWbSort}
+                          />
+                          <SortableColumnHeader
+                            column="wb_status"
+                            title="Статус WB"
+                            currentSortColumn={wbSortColumn}
+                            currentSortDirection={wbSortDirection}
+                            onSort={handleWbSort}
+                          />
+                          <SortableColumnHeader
+                            column="own_status"
+                            title="Собственный статус"
+                            currentSortColumn={wbSortColumn}
+                            currentSortDirection={wbSortDirection}
+                            onSort={handleWbSort}
+                          />
+                          <SortableColumnHeader
+                            column="supply_id"
+                            title="Supply ID"
+                            currentSortColumn={wbSortColumn}
+                            currentSortDirection={wbSortDirection}
+                            onSort={handleWbSort}
+                          />
                           <th>Офисы</th>
-                          <th>Цена продажи</th>
+                          <SortableColumnHeader
+                            column="sale_price"
+                            title="Цена продажи"
+                            currentSortColumn={wbSortColumn}
+                            currentSortDirection={wbSortDirection}
+                            onSort={handleWbSort}
+                          />
                           <th>Штрихкоды</th>
-                          <th>Тип доставки</th>
+                          <SortableColumnHeader
+                            column="delivery_type"
+                            title="Тип доставки"
+                            currentSortColumn={wbSortColumn}
+                            currentSortDirection={wbSortDirection}
+                            onSort={handleWbSort}
+                          />
                         </tr>
                       </thead>
                       <tbody>
-                        {wbOrders.map((order, index) => (
+                        {getCurrentPageWbOrders().map((order, index) => (
                           <tr key={order.id || order.order_id || index}>
                             <td>
                               <Form.Check
@@ -1066,6 +1680,13 @@ const Dashboard: React.FC = () => {
                         ))}
                       </tbody>
                     </Table>
+                    {wbOrders.length > 0 && (
+                      <PaginationComponent
+                        currentPage={wbCurrentPage}
+                        totalPages={Math.ceil(wbOrders.length / wbItemsPerPage)}
+                        onPageChange={(page) => setWbCurrentPage(page)}
+                      />
+                    )}
                   </div>
                 )}
               </Card.Body>
@@ -1170,19 +1791,67 @@ const Dashboard: React.FC = () => {
                               aria-label="Выбрать все заказы"
                             />
                           </th>
-                          <th>ID заказа</th>
-                          <th>Номер отправления</th>
-                          <th>Дата создания</th>
-                          <th>Название</th>
-                          <th>Артикул</th>
-                          <th>Статус</th>
-                          <th>Цена продажи</th>
-                          <th>Склад</th>
-                          <th>Способ доставки</th>
+                          <SortableColumnHeader
+                            column="order_id"
+                            title="ID заказа"
+                            currentSortColumn={ozonSortColumn}
+                            currentSortDirection={ozonSortDirection}
+                            onSort={handleOzonSort}
+                          />
+                          <SortableColumnHeader
+                            column="created_at"
+                            title="Дата создания"
+                            currentSortColumn={ozonSortColumn}
+                            currentSortDirection={ozonSortDirection}
+                            onSort={handleOzonSort}
+                            isDateColumn={true}
+                          />
+                          <SortableColumnHeader
+                            column="product_name"
+                            title="Название"
+                            currentSortColumn={ozonSortColumn}
+                            currentSortDirection={ozonSortDirection}
+                            onSort={handleOzonSort}
+                          />
+                          <SortableColumnHeader
+                            column="sku"
+                            title="Артикул"
+                            currentSortColumn={ozonSortColumn}
+                            currentSortDirection={ozonSortDirection}
+                            onSort={handleOzonSort}
+                          />
+                          <SortableColumnHeader
+                            column="status"
+                            title="Статус"
+                            currentSortColumn={ozonSortColumn}
+                            currentSortDirection={ozonSortDirection}
+                            onSort={handleOzonSort}
+                          />
+                          <SortableColumnHeader
+                            column="price"
+                            title="Цена продажи"
+                            currentSortColumn={ozonSortColumn}
+                            currentSortDirection={ozonSortDirection}
+                            onSort={handleOzonSort}
+                          />
+                          <SortableColumnHeader
+                            column="city"
+                            title="Склад"
+                            currentSortColumn={ozonSortColumn}
+                            currentSortDirection={ozonSortDirection}
+                            onSort={handleOzonSort}
+                          />
+                          <SortableColumnHeader
+                            column="delivery_type"
+                            title="Способ доставки"
+                            currentSortColumn={ozonSortColumn}
+                            currentSortDirection={ozonSortDirection}
+                            onSort={handleOzonSort}
+                          />
                         </tr>
                       </thead>
                       <tbody>
-                        {ozonOrders.map((order, index) => (
+                        {getCurrentPageOzonOrders().map((order, index) => (
                           <tr key={order.id || order.order_id || index}>
                             <td>
                               <Form.Check
@@ -1193,7 +1862,6 @@ const Dashboard: React.FC = () => {
                               />
                             </td>
                             <td>{order.order_id || '—'}</td>
-                            <td>{order.posting_number || '—'}</td>
                             <td>{formatDate(order.in_process_at || order.created_at || order.created_date)}</td>
                             <td>{order.product_name || order.name || '—'}</td>
                             <td>{order.sku || order.offer_id || '—'}</td>
@@ -1209,6 +1877,13 @@ const Dashboard: React.FC = () => {
                         ))}
                       </tbody>
                     </Table>
+                    {ozonOrders.length > 0 && (
+                      <PaginationComponent
+                        currentPage={ozonCurrentPage}
+                        totalPages={Math.ceil(ozonOrders.length / ozonItemsPerPage)}
+                        onPageChange={(page) => setOzonCurrentPage(page)}
+                      />
+                    )}
                   </div>
                 )}
               </Card.Body>
@@ -1313,20 +1988,81 @@ const Dashboard: React.FC = () => {
                               aria-label="Выбрать все заказы"
                             />
                           </th>
-                          <th>ID заказа</th>
-                          <th>Дата создания</th>
-                          <th>Название товара</th>
-                          <th>Код товара</th>
-                          <th>Статус</th>
-                          <th>Стоимость</th>
-                          <th>Регион</th>
-                          <th>Способ доставки</th>
-                          <th>Клиент</th>
-                          <th>Адрес доставки</th>
+                          <SortableColumnHeader
+                            column="order_id"
+                            title="ID заказа"
+                            currentSortColumn={ymSortColumn}
+                            currentSortDirection={ymSortDirection}
+                            onSort={handleYmSort}
+                          />
+                          <SortableColumnHeader
+                            column="created_at"
+                            title="Дата создания"
+                            currentSortColumn={ymSortColumn}
+                            currentSortDirection={ymSortDirection}
+                            onSort={handleYmSort}
+                            isDateColumn={true}
+                          />
+                          <SortableColumnHeader
+                            column="name"
+                            title="Название товара"
+                            currentSortColumn={ymSortColumn}
+                            currentSortDirection={ymSortDirection}
+                            onSort={handleYmSort}
+                          />
+                          <SortableColumnHeader
+                            column="shop_sku"
+                            title="Код товара"
+                            currentSortColumn={ymSortColumn}
+                            currentSortDirection={ymSortDirection}
+                            onSort={handleYmSort}
+                          />
+                          <SortableColumnHeader
+                            column="status"
+                            title="Статус"
+                            currentSortColumn={ymSortColumn}
+                            currentSortDirection={ymSortDirection}
+                            onSort={handleYmSort}
+                          />
+                          <SortableColumnHeader
+                            column="price"
+                            title="Стоимость"
+                            currentSortColumn={ymSortColumn}
+                            currentSortDirection={ymSortDirection}
+                            onSort={handleYmSort}
+                          />
+                          <SortableColumnHeader
+                            column="region"
+                            title="Регион"
+                            currentSortColumn={ymSortColumn}
+                            currentSortDirection={ymSortDirection}
+                            onSort={handleYmSort}
+                          />
+                          <SortableColumnHeader
+                            column="delivery_type"
+                            title="Способ доставки"
+                            currentSortColumn={ymSortColumn}
+                            currentSortDirection={ymSortDirection}
+                            onSort={handleYmSort}
+                          />
+                          <SortableColumnHeader
+                            column="customer_name"
+                            title="Клиент"
+                            currentSortColumn={ymSortColumn}
+                            currentSortDirection={ymSortDirection}
+                            onSort={handleYmSort}
+                          />
+                          <SortableColumnHeader
+                            column="delivery_address"
+                            title="Адрес доставки"
+                            currentSortColumn={ymSortColumn}
+                            currentSortDirection={ymSortDirection}
+                            onSort={handleYmSort}
+                          />
                         </tr>
                       </thead>
                       <tbody>
-                        {ymOrders.map((order, index) => (
+                        {getCurrentPageYmOrders().map((order, index) => (
                           <tr key={order.id || order.order_id || index}>
                             <td>
                               <Form.Check
@@ -1354,6 +2090,13 @@ const Dashboard: React.FC = () => {
                         ))}
                       </tbody>
                     </Table>
+                    {ymOrders.length > 0 && (
+                      <PaginationComponent
+                        currentPage={ymCurrentPage}
+                        totalPages={Math.ceil(ymOrders.length / ymItemsPerPage)}
+                        onPageChange={(page) => setYmCurrentPage(page)}
+                      />
+                    )}
                   </div>
                 )}
               </Card.Body>
