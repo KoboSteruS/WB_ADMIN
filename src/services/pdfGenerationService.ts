@@ -306,8 +306,8 @@ export const generateOrdersListPDF = async (
 export const generateStickersPDF = async (orders: WbOrder[]): Promise<void> => {
   try {
     // Увеличиваем ширину стикера, сохраняя пропорции
-    const STICKER_WIDTH = 40; // ширина в мм (увеличена с 58 до 70)
-    const STICKER_HEIGHT = 58; // высота в мм
+    const STICKER_WIDTH = 58; // ширина в мм (увеличена с 58 до 70)
+    const STICKER_HEIGHT = 40; // высота в мм
     
     // Текущий временной штамп для имени файла
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -320,7 +320,7 @@ export const generateStickersPDF = async (orders: WbOrder[]): Promise<void> => {
       const doc = new jsPDF({
         unit: 'mm',
         format: [STICKER_WIDTH, STICKER_HEIGHT],
-        orientation: 'portrait'
+        orientation: 'landscape'
       });
       
       // Сохраняем пустой PDF
@@ -362,10 +362,9 @@ export const generateStickersPDF = async (orders: WbOrder[]): Promise<void> => {
     
     // Создаем PDF документ с указанием точного размера страницы
     const pdfDoc = new jsPDF({
-      orientation: 'portrait',
+      orientation: 'landscape',
       unit: 'mm',
-      format: [STICKER_WIDTH, STICKER_HEIGHT],
-      compress: true,
+      format: [58, 40],
       hotfixes: ['px_scaling'] // Исправление для масштабирования пикселей
     });
     
@@ -375,7 +374,7 @@ export const generateStickersPDF = async (orders: WbOrder[]): Promise<void> => {
     loadedImages.forEach((result, index) => {
       // Добавляем новую страницу для каждого стикера, кроме первого
       if (index > 0) {
-        pdfDoc.addPage([STICKER_WIDTH, STICKER_HEIGHT]);
+        pdfDoc.addPage([58, 40]);
       }
       
       if (result.status === 'fulfilled') {
@@ -446,18 +445,18 @@ export const generateSupplyBarcodePDF = async (supplyBarcode: string, supplyId: 
     }
     
     // Используем стандартный размер A4
-    const PDF_WIDTH = 210; // ширина A4 в мм
-    const PDF_HEIGHT = 297; // высота A4 в мм
+    const PDF_WIDTH = 58; // ширина A4 в мм
+    const PDF_HEIGHT = 40; // высота A4 в мм
     
     // Текущий временной штамп для имени файла
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     
     // Создаем PDF документ с заданным размером
     const pdfDoc = new jsPDF({
-      orientation: 'portrait',
+      orientation: 'landscape',
       unit: 'mm',
       format: 'a4', // Используем стандартный формат A4
-      compress: true
+      compress: true,
     });
     
     try {
@@ -472,8 +471,8 @@ export const generateSupplyBarcodePDF = async (supplyBarcode: string, supplyId: 
       });
       
       // Определяем размеры для добавления изображения в PDF
-      const maxWidth = PDF_WIDTH - 40; // отступы по 20мм с каждой стороны
-      const maxHeight = PDF_HEIGHT - 80; // оставляем место для текста
+      const maxWidth = PDF_WIDTH; // отступы по 20мм с каждой стороны
+      const maxHeight = PDF_HEIGHT; // оставляем место для текста
       
       // Сохраняем соотношение сторон
       const imgRatio = img.width / img.height;
