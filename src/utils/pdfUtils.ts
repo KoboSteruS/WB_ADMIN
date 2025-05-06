@@ -214,8 +214,7 @@ export const addTableToPDF = (
     fontSize: options.fontSize || 10,
     font: 'Roboto',
     halign: 'center',
-    valign: 'middle',
-    fontStyle: 'normal'
+    valign: 'middle'
   };
   
   // Объединяем пользовательские стили с дефолтными
@@ -229,8 +228,7 @@ export const addTableToPDF = (
       width: colWidths[index],
       halign: 'left',
       overflow: styles.overflow,
-      font: 'Roboto', // Явно указываем шрифт для каждого столбца
-      fontStyle: 'normal'
+      font: 'Roboto' // Явно указываем шрифт для каждого столбца
     };
     
     // Применяем пользовательские настройки для столбцов, если они есть
