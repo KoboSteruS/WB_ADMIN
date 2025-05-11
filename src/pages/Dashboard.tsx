@@ -1,5 +1,6 @@
 import React, { useEffect, useState, ReactNode } from 'react';
 import { Container, Row, Col, Alert, Table, Button, Card } from 'react-bootstrap';
+import ButtonGroup from 'react-bootstrap/ButtonGroup';
 import Pagination from 'react-bootstrap/Pagination';
 import Spinner from 'react-bootstrap/Spinner';
 import { useNavigate } from 'react-router-dom';
@@ -103,6 +104,14 @@ const Dashboard: React.FC = () => {
 
   // Состояние для отображения только выбранного юридического лица
   const [showAllLegalEntities, setShowAllLegalEntities] = useState<boolean>(true);
+
+  // Добавляем состояния для фильтрации по статусам
+  const [wbStatusFilter, setWbStatusFilter] = useState<string | null>(null);
+  const [ozonStatusFilter, setOzonStatusFilter] = useState<string | null>(null);
+  const [ymStatusFilter, setYmStatusFilter] = useState<string | null>(null);
+
+  // Добавляем состояние для фильтра по статусу WB
+  const [wbStatusWbFilter, setWbStatusWbFilter] = useState<string | null>(null);
 
   /**
    * Загрузка списка юридических лиц с сервера
@@ -1043,10 +1052,10 @@ const Dashboard: React.FC = () => {
    * Функция для получения заказов Wildberries текущей страницы
    */
   const getCurrentPageWbOrders = () => {
-    const sortedOrders = getSortedWbOrders();
+    const filteredOrders = getFilteredWbOrders();
     const indexOfLastItem = wbCurrentPage * wbItemsPerPage;
     const indexOfFirstItem = indexOfLastItem - wbItemsPerPage;
-    return sortedOrders.slice(indexOfFirstItem, indexOfLastItem);
+    return filteredOrders.slice(indexOfFirstItem, indexOfLastItem);
   };
 
   /**
@@ -1135,10 +1144,10 @@ const Dashboard: React.FC = () => {
    * Функция для получения заказов Ozon текущей страницы
    */
   const getCurrentPageOzonOrders = () => {
-    const sortedOrders = getSortedOzonOrders();
+    const filteredOrders = getFilteredOzonOrders();
     const indexOfLastItem = ozonCurrentPage * ozonItemsPerPage;
     const indexOfFirstItem = indexOfLastItem - ozonItemsPerPage;
-    return sortedOrders.slice(indexOfFirstItem, indexOfLastItem);
+    return filteredOrders.slice(indexOfFirstItem, indexOfLastItem);
   };
 
   /**
@@ -1215,10 +1224,10 @@ const Dashboard: React.FC = () => {
    * Функция для получения заказов Yandex Market текущей страницы
    */
   const getCurrentPageYmOrders = () => {
-    const sortedOrders = getSortedYmOrders();
+    const filteredOrders = getFilteredYmOrders();
     const indexOfLastItem = ymCurrentPage * ymItemsPerPage;
     const indexOfFirstItem = indexOfLastItem - ymItemsPerPage;
-    return sortedOrders.slice(indexOfFirstItem, indexOfLastItem);
+    return filteredOrders.slice(indexOfFirstItem, indexOfLastItem);
   };
 
   /**
@@ -1616,6 +1625,117 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  /**
+   * Обновление базы данных Wildberries
+   */
+  const updateWbDatabase = async () => {
+    try {
+      setWbOrdersLoading(true);
+      const response = await fetch('http://62.113.44.196:8080/api/v1/wb-orders/update/', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ошибка HTTP: ${response.status}`);
+      }
+
+      // После успешного обновления БД, перезагружаем заказы
+      if (selectedLegalEntity) {
+        await loadWildberriesOrders(selectedLegalEntity);
+      }
+    } catch (error) {
+      console.error('Ошибка при обновлении БД Wildberries:', error);
+      setWbOrdersError(error instanceof Error ? error.message : 'Произошла ошибка при обновлении БД');
+    } finally {
+      setWbOrdersLoading(false);
+    }
+  };
+
+  /**
+   * Обновление базы данных Ozon
+   */
+  const updateOzonDatabase = async () => {
+    try {
+      setOzonOrdersLoading(true);
+      const response = await fetch('http://62.113.44.196:8080/api/v1/ozon-orders/update/', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ошибка HTTP: ${response.status}`);
+      }
+
+      // После успешного обновления БД, перезагружаем заказы
+      if (selectedLegalEntity) {
+        await loadOzonOrders(selectedLegalEntity);
+      }
+    } catch (error) {
+      console.error('Ошибка при обновлении БД Ozon:', error);
+      setOzonOrdersError(error instanceof Error ? error.message : 'Произошла ошибка при обновлении БД');
+    } finally {
+      setOzonOrdersLoading(false);
+    }
+  };
+
+  /**
+   * Получение отфильтрованных заказов Wildberries
+   */
+  const getFilteredWbOrders = () => {
+    let filteredOrders = getSortedWbOrders();
+    
+    // Фильтрация по внутреннему статусу
+    if (wbStatusFilter) {
+      filteredOrders = filteredOrders.filter(order => 
+        (order.own_status || '').toLowerCase() === wbStatusFilter.toLowerCase()
+      );
+    }
+    
+    // Фильтрация по статусу WB
+    if (wbStatusWbFilter) {
+      filteredOrders = filteredOrders.filter(order => 
+        (order.wb_status || '').toLowerCase() === wbStatusWbFilter.toLowerCase()
+      );
+    }
+    
+    return filteredOrders;
+  };
+
+  /**
+   * Получение отфильтрованных заказов Ozon
+   */
+  const getFilteredOzonOrders = () => {
+    let filteredOrders = getSortedOzonOrders();
+    
+    if (ozonStatusFilter) {
+      filteredOrders = filteredOrders.filter(order => 
+        (order.status || '').toLowerCase() === ozonStatusFilter.toLowerCase()
+      );
+    }
+    
+    return filteredOrders;
+  };
+
+  /**
+   * Получение отфильтрованных заказов Яндекс Маркет
+   */
+  const getFilteredYmOrders = () => {
+    let filteredOrders = getSortedYmOrders();
+    
+    if (ymStatusFilter) {
+      filteredOrders = filteredOrders.filter(order => 
+        (order.status || '').toLowerCase() === ymStatusFilter.toLowerCase()
+      );
+    }
+    
+    return filteredOrders;
+  };
+
   return (
     <Container fluid className="dashboard-container">
 
@@ -1774,6 +1894,15 @@ const Dashboard: React.FC = () => {
                   </Button>
 
                   <Button 
+                    variant="outline-success" 
+                    size="sm" 
+                    onClick={updateWbDatabase}
+                    className="me-2"
+                  >
+                    <i className="bi bi-database me-1"></i> Обновить БД
+                  </Button>
+
+                  <Button 
                     variant={wbStatusConfirm ? "outline-info" : "outline-warning"} 
                     size="sm" 
                     onClick={handleToggleWbOrders}
@@ -1783,6 +1912,98 @@ const Dashboard: React.FC = () => {
                   </Button>
                 </div>
                 
+                {/* Кнопки фильтрации по статусам Wildberries */}
+                <div className="mb-3">
+                  <div className="mb-2">
+                    <h6 className="mb-2">Внутренний статус:</h6>
+                    <ButtonGroup>
+                      <Button
+                        variant={wbStatusFilter === null ? "primary" : "outline-primary"}
+                        size="sm"
+                        onClick={() => setWbStatusFilter(null)}
+                      >
+                        Все
+                      </Button>
+                      <Button
+                        variant={wbStatusFilter === 'new' ? "primary" : "outline-primary"}
+                        size="sm"
+                        onClick={() => setWbStatusFilter('new')}
+                      >
+                        Новые
+                      </Button>
+                      <Button
+                        variant={wbStatusFilter === 'assembly' ? "primary" : "outline-primary"}
+                        size="sm"
+                        onClick={() => setWbStatusFilter('assembly')}
+                      >
+                        В сборке
+                      </Button>
+                      <Button
+                        variant={wbStatusFilter === 'ready_to_shipment' ? "primary" : "outline-primary"}
+                        size="sm"
+                        onClick={() => setWbStatusFilter('ready_to_shipment')}
+                      >
+                        Готовы к отгрузке
+                      </Button>
+                      <Button
+                        variant={wbStatusFilter === 'shipped' ? "primary" : "outline-primary"}
+                        size="sm"
+                        onClick={() => setWbStatusFilter('shipped')}
+                      >
+                        Отгружены
+                      </Button>
+                    </ButtonGroup>
+                  </div>
+                  
+                  <div>
+                    <h6 className="mb-2">Статус WB:</h6>
+                    <ButtonGroup>
+                      <Button
+                        variant={wbStatusWbFilter === null ? "primary" : "outline-primary"}
+                        size="sm"
+                        onClick={() => setWbStatusWbFilter(null)}
+                      >
+                        Все
+                      </Button>
+                      <Button
+                        variant={wbStatusWbFilter === 'new' ? "primary" : "outline-primary"}
+                        size="sm"
+                        onClick={() => setWbStatusWbFilter('new')}
+                      >
+                        Новый
+                      </Button>
+                      <Button
+                        variant={wbStatusWbFilter === 'confirm' ? "primary" : "outline-primary"}
+                        size="sm"
+                        onClick={() => setWbStatusWbFilter('confirm')}
+                      >
+                        Подтвержден
+                      </Button>
+                      <Button
+                        variant={wbStatusWbFilter === 'cancel' ? "primary" : "outline-primary"}
+                        size="sm"
+                        onClick={() => setWbStatusWbFilter('cancel')}
+                      >
+                        Отменен
+                      </Button>
+                      <Button
+                        variant={wbStatusWbFilter === 'delivered' ? "primary" : "outline-primary"}
+                        size="sm"
+                        onClick={() => setWbStatusWbFilter('delivered')}
+                      >
+                        Доставлен
+                      </Button>
+                      <Button
+                        variant={wbStatusWbFilter === 'complete' ? "primary" : "outline-primary"}
+                        size="sm"
+                        onClick={() => setWbStatusWbFilter('complete')}
+                      >
+                        Выполнен
+                      </Button>
+                    </ButtonGroup>
+                  </div>
+                </div>
+
                 {wbOrdersLoading ? (
                   <div className="text-center py-5">
                     <Spinner animation="border" variant="primary" />
@@ -1869,14 +2090,8 @@ const Dashboard: React.FC = () => {
                             currentSortDirection={wbSortDirection}
                             onSort={handleWbSort}
                           />
-                          <th>Штрихкоды</th>
-                          <SortableColumnHeader
-                            column="delivery_type"
-                            title="Тип доставки"
-                            currentSortColumn={wbSortColumn}
-                            currentSortDirection={wbSortDirection}
-                            onSort={handleWbSort}
-                          />
+                          <th>Часть А</th>
+                          <th>Часть В</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1927,16 +2142,8 @@ const Dashboard: React.FC = () => {
                                 : '—'}
                             </td>
                             <td>{formatPrice(order.sale_price)}</td>
-                            <td>
-                              {order.skus && order.skus.length > 0 
-                                ? order.skus.join(', ') 
-                                : '—'}
-                            </td>
-                            <td>
-                              {order.delivery_type 
-                                ? <Badge bg="primary">{typeof order.delivery_type === 'string' ? order.delivery_type.toUpperCase() : order.delivery_type}</Badge>
-                                : '—'}
-                            </td>
+                            <td>{order.part_a || '—'}</td>
+                            <td>{order.part_b || '—'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -2022,8 +2229,58 @@ const Dashboard: React.FC = () => {
                   >
                     <i className="bi bi-arrow-repeat me-1"></i> Обновить
                   </Button>
+
+                  <Button 
+                    variant="outline-success" 
+                    size="sm" 
+                    onClick={updateOzonDatabase}
+                    className="me-2"
+                  >
+                    <i className="bi bi-database me-1"></i> Обновить БД
+                  </Button>
                 </div>
-                
+
+                {/* Кнопки фильтрации по статусам Ozon */}
+                <div className="mb-3">
+                  <ButtonGroup>
+                    <Button
+                      variant={ozonStatusFilter === null ? "primary" : "outline-primary"}
+                      size="sm"
+                      onClick={() => setOzonStatusFilter(null)}
+                    >
+                      Все
+                    </Button>
+                    <Button
+                      variant={ozonStatusFilter === 'new' ? "primary" : "outline-primary"}
+                      size="sm"
+                      onClick={() => setOzonStatusFilter('new')}
+                    >
+                      Новые
+                    </Button>
+                    <Button
+                      variant={ozonStatusFilter === 'processing' ? "primary" : "outline-primary"}
+                      size="sm"
+                      onClick={() => setOzonStatusFilter('processing')}
+                    >
+                      В обработке
+                    </Button>
+                    <Button
+                      variant={ozonStatusFilter === 'ready_to_ship' ? "primary" : "outline-primary"}
+                      size="sm"
+                      onClick={() => setOzonStatusFilter('ready_to_ship')}
+                    >
+                      Готовы к отправке
+                    </Button>
+                    <Button
+                      variant={ozonStatusFilter === 'shipped' ? "primary" : "outline-primary"}
+                      size="sm"
+                      onClick={() => setOzonStatusFilter('shipped')}
+                    >
+                      Отправлены
+                    </Button>
+                  </ButtonGroup>
+                </div>
+
                 {ozonOrdersLoading ? (
                   <div className="text-center py-5">
                     <Spinner animation="border" variant="primary" />
@@ -2220,7 +2477,48 @@ const Dashboard: React.FC = () => {
                     <i className="bi bi-arrow-repeat me-1"></i> Обновить
                   </Button>
                 </div>
-                
+
+                {/* Кнопки фильтрации по статусам Яндекс Маркет */}
+                <div className="mb-3">
+                  <ButtonGroup>
+                    <Button
+                      variant={ymStatusFilter === null ? "primary" : "outline-primary"}
+                      size="sm"
+                      onClick={() => setYmStatusFilter(null)}
+                    >
+                      Все
+                    </Button>
+                    <Button
+                      variant={ymStatusFilter === 'new' ? "primary" : "outline-primary"}
+                      size="sm"
+                      onClick={() => setYmStatusFilter('new')}
+                    >
+                      Новые
+                    </Button>
+                    <Button
+                      variant={ymStatusFilter === 'processing' ? "primary" : "outline-primary"}
+                      size="sm"
+                      onClick={() => setYmStatusFilter('processing')}
+                    >
+                      В обработке
+                    </Button>
+                    <Button
+                      variant={ymStatusFilter === 'ready_to_ship' ? "primary" : "outline-primary"}
+                      size="sm"
+                      onClick={() => setYmStatusFilter('ready_to_ship')}
+                    >
+                      Готовы к отправке
+                    </Button>
+                    <Button
+                      variant={ymStatusFilter === 'shipped' ? "primary" : "outline-primary"}
+                      size="sm"
+                      onClick={() => setYmStatusFilter('shipped')}
+                    >
+                      Отправлены
+                    </Button>
+                  </ButtonGroup>
+                </div>
+
                 {ymOrdersLoading ? (
                   <div className="text-center py-5">
                     <Spinner animation="border" variant="primary" />

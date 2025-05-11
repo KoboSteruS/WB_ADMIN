@@ -17,6 +17,7 @@ import {
   getImageSrcFromBase64 
 } from '../utils/orderUtils';
 import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
 
 /**
  * Создает PDF документ с нестандартным размером страницы
@@ -318,135 +319,53 @@ export const generateOrdersListPDF = async (
 };
 
 /**
- * Генерация PDF #3: Наклейки для заказов
+ * Генерация PDF со стикерами для заказов
  */
-export const generateStickersPDF = async (orders: WbOrder[]): Promise<void> => {
-  try {
-    // Увеличиваем ширину стикера, сохраняя пропорции
-    const STICKER_WIDTH = 58; // ширина в мм (увеличена с 58 до 70)
-    const STICKER_HEIGHT = 40; // высота в мм
-    
-    // Текущий временной штамп для имени файла
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    
-    // Если нет заказов, создаем пустой PDF
-    if (orders.length === 0) {
-      console.log('Нет заказов для создания стикеров');
-      
-      // Создаем стандартный PDF
-      const doc = new jsPDF({
-        unit: 'mm',
-        format: [STICKER_WIDTH, STICKER_HEIGHT],
-        orientation: 'landscape'
-      });
-      
-      // Сохраняем пустой PDF
-      const filename = `WB_Order_Stickers_${timestamp}.pdf`;
-      doc.save(filename);
-      
-      console.log('Создан пустой PDF-файл стикеров');
-      return;
-    }
-    
-    // Создаем массив промисов для предварительной обработки изображений
-    const imagePromises = orders
-      .filter(order => order.sticker && isBase64Image(order.sticker))
-      .map(order => {
-        return new Promise<{ order: WbOrder, img: HTMLImageElement }>((resolve, reject) => {
-          try {
-            const imgSrc = getImageSrcFromBase64(order.sticker);
-            const img = new Image();
-            img.crossOrigin = 'Anonymous';
-            
-            img.onload = () => {
-              resolve({ order, img });
-            };
-            
-            img.onerror = (error) => {
-              console.error(`Ошибка загрузки изображения для заказа ${order.order_id}:`, error);
-              reject(error);
-            };
-            
-            img.src = imgSrc;
-          } catch (error) {
-            reject(error);
-          }
-        });
-      });
+export const generateStickersPDF = (orders: WbOrder[]) => {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 10;
+  const stickerWidth = 100;
+  const stickerHeight = 50;
+  const stickersPerRow = 2;
+  const stickersPerPage = 8;
 
-    // Ждем загрузки всех изображений
-    const loadedImages = await Promise.allSettled(imagePromises);
-    
-    // Создаем PDF документ с указанием точного размера страницы
-    const pdfDoc = new jsPDF({
-      orientation: 'landscape',
-      unit: 'mm',
-      format: [58, 40],
-      hotfixes: ['px_scaling'] // Исправление для масштабирования пикселей
-    });
-    
-    // Обрабатываем каждое загруженное изображение
-    let pageIndex = 0;
-    
-    loadedImages.forEach((result, index) => {
-      // Добавляем новую страницу для каждого стикера, кроме первого
-      if (index > 0) {
-        pdfDoc.addPage([58, 40]);
-      }
-      
-      if (result.status === 'fulfilled') {
-        const { order, img } = result.value;
-        
-        try {
-          // Для стикеров WB важнее показать всё изображение, чем сохранить пропорции
-          // Растягиваем изображение на всю страницу
-          pdfDoc.addImage(
-            img, 
-            'PNG', 
-            0, // x - начинаем с левого края
-            0, // y - начинаем с верхнего края
-            STICKER_WIDTH, // используем всю ширину
-            STICKER_HEIGHT // используем всю высоту
-          );
-          
-          pageIndex++;
-        } catch (error) {
-          console.error(`Ошибка при добавлении стикера для заказа ${order.order_id}:`, error);
-          pdfDoc.setFontSize(8);
-          pdfDoc.text(`Ошибка стикера: ${order.order_id || 'Нет ID'}`, 5, 20);
-        }
-      } else {
-        // В случае ошибки загрузки изображения, добавляем текст об ошибке
-        pdfDoc.setFontSize(8);
-        pdfDoc.text('Ошибка загрузки стикера', 5, 20);
-      }
-    });
-    
-    // Обрабатываем заказы, у которых нет стикеров
-    const ordersWithoutStickers = orders.filter(order => !order.sticker || !isBase64Image(order.sticker));
-    
-    ordersWithoutStickers.forEach((order, index) => {
-      // Добавляем новую страницу, если уже есть страницы
-      if (pageIndex > 0 || index > 0) {
-        pdfDoc.addPage([STICKER_WIDTH, STICKER_HEIGHT]);
-      }
-      
-      // Добавляем текст о том, что стикер отсутствует
-      pdfDoc.setFontSize(8);
-      pdfDoc.text(`Нет стикера для заказа: ${order.order_id || 'Нет ID'}`, 5, 20);
-      
-      pageIndex++;
-    });
-    
-    // Сохраняем PDF
-    const filename = `WB_Order_Stickers_${timestamp}.pdf`;
-    pdfDoc.save(filename);
-    console.log(`PDF со стикерами успешно создан: ${filename}, страниц: ${pageIndex}`);
-    
-  } catch (error) {
-    console.error('Ошибка при создании PDF со стикерами:', error);
-    alert(`Произошла ошибка при создании PDF со стикерами: ${error instanceof Error ? (error as Error).message : String(error)}`);
-  }
+  let currentPage = 1;
+  let currentRow = 0;
+  let currentCol = 0;
+
+  orders.forEach((order, index) => {
+    if (index > 0 && index % stickersPerPage === 0) {
+      doc.addPage();
+      currentPage++;
+      currentRow = 0;
+      currentCol = 0;
+    }
+
+    const x = margin + (currentCol * stickerWidth);
+    const y = margin + (currentRow * stickerHeight);
+
+    // Рисуем рамку стикера
+    doc.rect(x, y, stickerWidth, stickerHeight);
+
+    // Добавляем информацию о заказе
+    doc.setFontSize(10);
+    doc.text(`Заказ: ${order.order_id || '—'}`, x + 5, y + 10);
+    doc.text(`Артикул: ${order.nm_id || '—'}`, x + 5, y + 20);
+    doc.text(`Часть А: ${order.part_a || '—'}`, x + 5, y + 30);
+    doc.text(`Часть В: ${order.part_b || '—'}`, x + 5, y + 40);
+
+    // Обновляем позицию для следующего стикера
+    currentCol++;
+    if (currentCol >= stickersPerRow) {
+      currentCol = 0;
+      currentRow++;
+    }
+  });
+
+  // Сохраняем PDF
+  doc.save('stickers.pdf');
 };
 
 /**

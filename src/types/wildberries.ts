@@ -305,41 +305,44 @@ export interface WildberriesApiError {
  * Интерфейс для данных заказа Wildberries
  */
 export interface WbOrder {
-  id?: number;
-  address?: string[] | string | null;
-  ddate?: string | null;
-  sale_price?: string | number;
-  required_meta?: any[];
-  delivery_type?: string | number;
-  comment?: string;
-  scan_price?: string | number | null;
+  id?: number | string;
+  order_id?: number | string;
   order_uid?: string;
-  article?: string | number;
-  color_code?: string | number;
-  rid?: string | number;
   created_at?: string;
-  offices?: string[];
-  skus?: string[];
-  order_id?: string | number;
-  warehouse_id?: number;
-  nm_id?: number;
-  chrt_id?: number;
-  price?: string | number;
-  converted_price?: string | number;
-  currency_code?: number;
-  converted_currency_code?: number;
-  cargo_type?: number;
-  is_zero_order?: boolean;
-  options?: {
-    [key: string]: any;
-  };
+  article?: string;
+  nm_id?: string | number;
   wb_status?: string;
   own_status?: string;
-  sticker?: string;
-  wb_token?: number;
+  status?: string;
   supply_id?: string;
   supply_barcode?: string;
-  [key: string]: any;
+  offices?: string[];
+  sale_price?: number;
+  price?: number;
+  skus?: string[];
+  delivery_type?: string;
+  wb_token?: number;
+  part_a?: string;
+  part_b?: string;
+  address?: string | null;
+  ddate?: string | null;
+  required_meta?: any[];
+  comment?: string;
+  scan_price?: number | null;
+  color_code?: string;
+  warehouse_id?: string | number;
+  cargo_type?: string | number;
+  rid?: string;
+  chrt_id?: string | number;
+  options?: {
+    isB2B?: boolean;
+  };
+  supplierArticle?: string;
+  vendorCode?: string;
+  converted_price?: number;
+  currency_code?: number;
+  converted_currency_code?: number;
+  is_zero_order?: boolean;
 }
 
 /**
