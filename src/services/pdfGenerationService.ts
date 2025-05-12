@@ -362,9 +362,9 @@ export const generateStickersPDF = (orders: WbOrder[]) => {
       currentCol = 0;
       currentRow++;
     }
-  });
-
-  // Сохраняем PDF
+    });
+    
+    // Сохраняем PDF
   doc.save('stickers.pdf');
 };
 

@@ -112,6 +112,8 @@ const Dashboard: React.FC = () => {
 
   // Добавляем состояние для фильтра по статусу WB
   const [wbStatusWbFilter, setWbStatusWbFilter] = useState<string | null>(null);
+  const [selectedWbOrder, setSelectedWbOrder] = useState<WbOrder | null>(null);
+  const [showWbModal, setShowWbModal] = useState(false);
 
   /**
    * Загрузка списка юридических лиц с сервера
@@ -1687,23 +1689,12 @@ const Dashboard: React.FC = () => {
    * Получение отфильтрованных заказов Wildberries
    */
   const getFilteredWbOrders = () => {
-    let filteredOrders = getSortedWbOrders();
-    
-    // Фильтрация по внутреннему статусу
-    if (wbStatusFilter) {
-      filteredOrders = filteredOrders.filter(order => 
-        (order.own_status || '').toLowerCase() === wbStatusFilter.toLowerCase()
-      );
-    }
-    
-    // Фильтрация по статусу WB
-    if (wbStatusWbFilter) {
-      filteredOrders = filteredOrders.filter(order => 
-        (order.wb_status || '').toLowerCase() === wbStatusWbFilter.toLowerCase()
-      );
-    }
-    
-    return filteredOrders;
+    return wbOrders.filter(order => {
+      if (wbStatusWbFilter && order.wb_status !== wbStatusWbFilter) {
+        return false;
+      }
+      return true;
+    });
   };
 
   /**
@@ -1914,96 +1905,21 @@ const Dashboard: React.FC = () => {
                 
                 {/* Кнопки фильтрации по статусам Wildberries */}
                 <div className="mb-3">
-                  <div className="mb-2">
-                    <h6 className="mb-2">Внутренний статус:</h6>
-                    <ButtonGroup>
-                      <Button
-                        variant={wbStatusFilter === null ? "primary" : "outline-primary"}
-                        size="sm"
-                        onClick={() => setWbStatusFilter(null)}
-                      >
-                        Все
-                      </Button>
-                      <Button
-                        variant={wbStatusFilter === 'new' ? "primary" : "outline-primary"}
-                        size="sm"
-                        onClick={() => setWbStatusFilter('new')}
-                      >
-                        Новые
-                      </Button>
-                      <Button
-                        variant={wbStatusFilter === 'assembly' ? "primary" : "outline-primary"}
-                        size="sm"
-                        onClick={() => setWbStatusFilter('assembly')}
-                      >
-                        В сборке
-                      </Button>
-                      <Button
-                        variant={wbStatusFilter === 'ready_to_shipment' ? "primary" : "outline-primary"}
-                        size="sm"
-                        onClick={() => setWbStatusFilter('ready_to_shipment')}
-                      >
-                        Готовы к отгрузке
-                      </Button>
-                      <Button
-                        variant={wbStatusFilter === 'shipped' ? "primary" : "outline-primary"}
-                        size="sm"
-                        onClick={() => setWbStatusFilter('shipped')}
-                      >
-                        Отгружены
-                      </Button>
-                    </ButtonGroup>
-                  </div>
-                  
                   <div>
                     <h6 className="mb-2">Статус WB:</h6>
-                    <ButtonGroup>
-                      <Button
-                        variant={wbStatusWbFilter === null ? "primary" : "outline-primary"}
-                        size="sm"
-                        onClick={() => setWbStatusWbFilter(null)}
-                      >
-                        Все
-                      </Button>
-                      <Button
-                        variant={wbStatusWbFilter === 'new' ? "primary" : "outline-primary"}
-                        size="sm"
-                        onClick={() => setWbStatusWbFilter('new')}
-                      >
-                        Новый
-                      </Button>
-                      <Button
-                        variant={wbStatusWbFilter === 'confirm' ? "primary" : "outline-primary"}
-                        size="sm"
-                        onClick={() => setWbStatusWbFilter('confirm')}
-                      >
-                        Подтвержден
-                      </Button>
-                      <Button
-                        variant={wbStatusWbFilter === 'cancel' ? "primary" : "outline-primary"}
-                        size="sm"
-                        onClick={() => setWbStatusWbFilter('cancel')}
-                      >
-                        Отменен
-                      </Button>
-                      <Button
-                        variant={wbStatusWbFilter === 'delivered' ? "primary" : "outline-primary"}
-                        size="sm"
-                        onClick={() => setWbStatusWbFilter('delivered')}
-                      >
-                        Доставлен
-                      </Button>
-                      <Button
-                        variant={wbStatusWbFilter === 'complete' ? "primary" : "outline-primary"}
-                        size="sm"
-                        onClick={() => setWbStatusWbFilter('complete')}
-                      >
-                        Выполнен
-                      </Button>
-                    </ButtonGroup>
+                    <Form.Select
+                      value={wbStatusWbFilter || ''}
+                      onChange={(e) => setWbStatusWbFilter(e.target.value || null)}
+                      className="w-auto"
+                    >
+                      <option value="">Все</option>
+                      <option value="new">Новый</option>
+                      <option value="confirm">Подтвержден</option>
+                      <option value="cancel">Отменен</option>
+                    </Form.Select>
                   </div>
                 </div>
-
+                
                 {wbOrdersLoading ? (
                   <div className="text-center py-5">
                     <Spinner animation="border" variant="primary" />
@@ -2280,7 +2196,7 @@ const Dashboard: React.FC = () => {
                     </Button>
                   </ButtonGroup>
                 </div>
-
+                
                 {ozonOrdersLoading ? (
                   <div className="text-center py-5">
                     <Spinner animation="border" variant="primary" />
@@ -2518,7 +2434,7 @@ const Dashboard: React.FC = () => {
                     </Button>
                   </ButtonGroup>
                 </div>
-
+                
                 {ymOrdersLoading ? (
                   <div className="text-center py-5">
                     <Spinner animation="border" variant="primary" />
