@@ -4,20 +4,30 @@
 import { WbOrder } from '../types/wildberries';
 
 /**
- * Форматирует дату в локализованный формат
+ * Форматирует дату в локализованный формат с временем
  * @param dateString Строка с датой
- * @returns Отформатированная дата
+ * @returns Отформатированная дата в формате ДД.ММ.ГГГГ Ч:М
  */
 export const formatDate = (dateString?: string): string => {
   if (!dateString) return '—';
   
   try {
     const date = new Date(dateString);
-    return date.toLocaleDateString('ru-RU', {
+    
+    // Формат даты ДД.ММ.ГГГГ
+    const formattedDate = date.toLocaleDateString('ru-RU', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric'
     });
+    
+    // Формат времени Ч:М с ведущими нулями
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+    const formattedTime = `${hours < 10 ? '0' + hours : hours}:${minutes < 10 ? '0' + minutes : minutes}`;
+    
+    // Объединяем дату и время
+    return `${formattedDate} ${formattedTime}`;
   } catch (e) {
     return dateString;
   }
