@@ -69,7 +69,9 @@ body {
 .main-content {
   flex: 1;
   padding: 20px;
-  transition: margin-left 0.3s ease;
+  transition: margin-left 0.3s ease, width 0.3s ease;
+  will-change: margin-left, width;
+  overflow-x: hidden;
 }
 
 .main-content.sidebar-open {
@@ -250,4 +252,18 @@ a:focus, button:focus, input:focus, select:focus, textarea:focus {
 .fade-exit-active {
   opacity: 0;
   transition: opacity 300ms;
+}
+
+/* Таблицы и их адаптивность */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  position: relative;
+}
+
+.table-responsive table {
+  width: 100%;
+  margin-bottom: 0;
+  table-layout: auto;
 }

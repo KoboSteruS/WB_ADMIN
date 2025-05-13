@@ -37,6 +37,8 @@ function App() {
 
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
+    
+    // Удаляем обновление таблиц при изменении сайдбара
   };
 
   // Компонент для защищенных маршрутов

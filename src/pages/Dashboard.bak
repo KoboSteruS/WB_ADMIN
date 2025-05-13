@@ -31,7 +31,6 @@ import {
 } from '../services/yandexMarketApi';
 import { formatDate, formatPrice } from '../utils/orderUtils';
 import { getBadgeColor, getStatusText } from '../utils/statusHelpers';
-import { mergePDFsInOrder, downloadBlob } from '../utils/pdfUtils';
 
 // Импортируем сервис генерации PDF
 import { 
@@ -102,7 +101,6 @@ const Dashboard: React.FC = () => {
   const [statusChangeLoading, setStatusChangeLoading] = useState<boolean>(false);
   const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
   const [statusChangeSuccess, setStatusChangeSuccess] = useState<boolean>(false);
-  const [statusChangeMessage, setStatusChangeMessage] = useState<string | null>(null);
 
   // Состояние для отображения только выбранного юридического лица
   const [showAllLegalEntities, setShowAllLegalEntities] = useState<boolean>(true);
@@ -1283,7 +1281,7 @@ const Dashboard: React.FC = () => {
   /**
    * Компонент заголовка столбца с сортировкой
    */
-  const SortableColumnHeader = ({ 
+  const SortableColumnHeader = React.memo(({ 
     column, 
     title, 
     currentSortColumn, 
@@ -1310,12 +1308,12 @@ const Dashboard: React.FC = () => {
         </span>
       </div>
     </th>
-  );
+  ));
 
   /**
    * Компонент пагинации для отображения страниц
    */
-  const PaginationComponent = ({ 
+  const PaginationComponent = React.memo(({ 
     currentPage, 
     totalPages, 
     onPageChange 
@@ -1396,7 +1394,7 @@ const Dashboard: React.FC = () => {
         </Pagination>
       </div>
     );
-  };
+  });
 
   /**
    * Обработчик добавления заказов Wildberries в поставку
@@ -1931,66 +1929,6 @@ const Dashboard: React.FC = () => {
     setSelectAllYm(true);
   };
 
-  /**
-   * Объединяет выбранные стикеры Ozon в один PDF-файл
-   */
-  const handleMergeOzonStickers = async () => {
-    // Используем выбранные заказы или все отфильтрованные, если ничего не выбрано
-    const ordersToUse = selectedOzonOrders.size > 0
-      ? getSelectedOzonOrdersData()
-      : getFilteredOzonOrders();
-    
-    // Фильтруем только заказы со стикерами
-    const ordersWithStickers = ordersToUse.filter(order => order.sticker_pdf);
-    
-    if (ordersWithStickers.length === 0) {
-      alert('Нет заказов со стикерами для объединения');
-      return;
-    }
-    
-    try {
-      // Показываем индикатор загрузки
-      setStatusChangeLoading(true);
-      
-      // Получаем URLs стикеров
-      const stickerUrls = ordersWithStickers.map(order => order.sticker_pdf || '');
-      
-      // Отображаем информацию о количестве обрабатываемых стикеров
-      const statusMessage = `Объединение ${stickerUrls.length} стикеров...`;
-      setStatusChangeMessage(statusMessage);
-      
-      // Объединяем PDF-файлы
-      const mergedPdfBlob = await mergePDFsInOrder(stickerUrls);
-      
-      // Формируем имя файла с текущей датой и временем
-      const now = new Date();
-      const dateStr = now.toLocaleDateString('ru-RU').replace(/\./g, '-');
-      const timeStr = now.toLocaleTimeString('ru-RU').replace(/:/g, '-');
-      const fileName = `ozon-stickers-${dateStr}-${timeStr}.pdf`;
-      
-      // Скачиваем объединенный PDF
-      downloadBlob(mergedPdfBlob, fileName);
-      
-      // Убираем индикатор загрузки
-      setStatusChangeLoading(false);
-      setStatusChangeMessage('');
-      
-      // Выводим сообщение об успешном объединении
-      alert(`Успешно объединено ${stickerUrls.length} стикеров`);
-    } catch (error) {
-      console.error('Ошибка при объединении стикеров:', error);
-      setStatusChangeLoading(false);
-      setStatusChangeMessage('');
-      
-      // Показываем понятное сообщение об ошибке
-      let errorMessage = 'Не удалось объединить стикеры';
-      if (error instanceof Error) {
-        errorMessage += `: ${error.message}`;
-      }
-      alert(errorMessage);
-    }
-  };
-
   return (
     <Container fluid className="dashboard-container">
 
@@ -2115,15 +2053,6 @@ const Dashboard: React.FC = () => {
                   <Alert variant="success" className="mb-3" dismissible onClose={() => setStatusChangeSuccess(false)}>
                     <i className="bi bi-check-circle me-2"></i>
                     Действие успешно выполнено
-                  </Alert>
-                )}
-                
-                {statusChangeMessage && statusChangeLoading && (
-                  <Alert variant="info" className="mb-3">
-                    <div className="d-flex align-items-center">
-                      <Spinner animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
-                      <span>{statusChangeMessage}</span>
-                    </div>
                   </Alert>
                 )}
                 
@@ -2441,16 +2370,6 @@ const Dashboard: React.FC = () => {
                     className="me-2"
                   >
                     <i className="bi bi-check-all me-1"></i> Выделить все заказы
-                  </Button>
-
-                  <Button 
-                    variant="outline-success" 
-                    size="sm" 
-                    onClick={handleMergeOzonStickers}
-                    className="me-2"
-                    title="Объединить стикеры выбранных заказов в один PDF"
-                  >
-                    <i className="bi bi-file-earmark-pdf me-1"></i> Объединить стикеры
                   </Button>
                 </div>
 

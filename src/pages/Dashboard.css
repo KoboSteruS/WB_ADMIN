@@ -1,8 +1,7 @@
 .dashboard-container {
   padding: 20px 0;
+  transition: all 0.3s ease;
 }
-
-
 
 .page-title {
   font-size: 1.8rem;
@@ -83,4 +82,18 @@
   .chart-placeholder {
     height: 200px !important;
   }
+}
+
+/* Стили для таблиц в Dashboard */
+.table-responsive {
+  position: relative;
+  z-index: 1;
+  overflow-x: auto;
+  width: 100% !important;
+}
+
+/* Улучшение отзывчивости таблиц */
+.table-responsive table {
+  width: 100% !important;
+  margin-bottom: 0;
 } 

@@ -267,4 +267,81 @@ export const addTableToPDF = (
 /**
  * Добавляет таблицу с кириллицей (альтернативное название)
  */
-export const addCyrillicTable = addTableToPDF; 
+export const addCyrillicTable = addTableToPDF;
+
+/**
+ * Объединяет несколько PDF файлов в один по указанным URL
+ * @param urlsInOrder - массив URL PDF-файлов, которые нужно объединить в указанном порядке
+ * @returns Blob с объединенным PDF-файлом
+ */
+export async function mergePDFsInOrder(urlsInOrder: string[]): Promise<Blob> {
+  try {
+    // Импортируем pdf-lib динамически
+    const pdfLib = await import('pdf-lib');
+    const PDFDocument = pdfLib.PDFDocument;
+    
+    const mergedPdf = await PDFDocument.create();
+
+    for (const url of urlsInOrder) {
+      try {
+        // Добавляем префикс к URL, если он не начинается с http
+        const fullUrl = url.startsWith('http') ? url : `http://62.113.44.196:8080${url}`;
+        
+        // Загружаем PDF по URL
+        const existingPdfBytes = await fetch(fullUrl).then(res => {
+          if (!res.ok) {
+            throw new Error(`Ошибка загрузки PDF: ${res.status} ${res.statusText}`);
+          }
+          return res.arrayBuffer();
+        });
+        
+        // Загружаем PDF документ
+        const pdf = await PDFDocument.load(existingPdfBytes);
+        
+        // Копируем все страницы из исходного документа
+        const pageCount = pdf.getPageCount();
+        if (pageCount > 0) {
+          const pageIndices = Array.from({ length: pageCount }, (_, i) => i);
+          const pages = await mergedPdf.copyPages(pdf, pageIndices);
+          
+          // Добавляем все страницы в объединенный документ
+          pages.forEach((page: any) => {
+            mergedPdf.addPage(page);
+          });
+        }
+      } catch (error) {
+        console.error(`Ошибка при обработке PDF по URL ${url}:`, error);
+        // Продолжаем с следующим URL, даже если текущий вызвал ошибку
+      }
+    }
+
+    // Сохраняем объединенный PDF
+    const mergedBytes = await mergedPdf.save();
+    
+    // Возвращаем как Blob
+    return new Blob([mergedBytes], { type: 'application/pdf' });
+  } catch (error) {
+    console.error('Ошибка при объединении PDF файлов:', error);
+    throw error;
+  }
+}
+
+/**
+ * Скачивает Blob как файл с указанным именем
+ * @param blob - Blob для скачивания
+ * @param fileName - имя файла для скачивания
+ */
+export function downloadBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  
+  // Очищаем ресурсы
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 100);
+} 
