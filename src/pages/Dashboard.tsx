@@ -115,20 +115,35 @@ const Dashboard: React.FC = () => {
   const [selectedWbOrder, setSelectedWbOrder] = useState<WbOrder | null>(null);
   const [showWbModal, setShowWbModal] = useState(false);
 
-  // Обновляем useEffect для сброса текущей страницы при изменении фильтров
+  // Обновляем useEffect для сброса текущей страницы и обновления данных при изменении фильтров
   useEffect(() => {
     // Сброс текущей страницы Wildberries при изменении фильтра WB
     setWbCurrentPage(1);
+    
+    // Обновление данных при изменении фильтра
+    if (selectedLegalEntity) {
+      updateWbDatabase();
+    }
   }, [wbStatusWbFilter]);
 
   useEffect(() => {
     // Сброс текущей страницы Ozon при изменении фильтра Ozon
     setOzonCurrentPage(1);
+    
+    // Обновление данных при изменении фильтра
+    if (selectedLegalEntity) {
+      updateOzonDatabase();
+    }
   }, [ozonStatusFilter]);
 
   useEffect(() => {
     // Сброс текущей страницы Yandex Market при изменении фильтра Yandex Market
     setYmCurrentPage(1);
+    
+    // Обновление данных при изменении фильтра
+    if (selectedLegalEntity && selectedMarketplace === 'yandex-market') {
+      loadYandexMarketOrders(selectedLegalEntity);
+    }
   }, [ymStatusFilter]);
 
   /**
