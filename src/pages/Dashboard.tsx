@@ -1774,6 +1774,51 @@ const Dashboard: React.FC = () => {
   };
 
   /**
+   * Обработчик изменения страницы для Wildberries
+   */
+  const handleWbPageChange = (page: number) => {
+    setWbCurrentPage(page);
+    
+    // Обновление данных при изменении страницы
+    if (selectedLegalEntity) {
+      // Обновляем данные с небольшой задержкой, чтобы страница успела обновиться
+      setTimeout(() => {
+        loadWildberriesOrders(selectedLegalEntity);
+      }, 100);
+    }
+  };
+
+  /**
+   * Обработчик изменения страницы для Ozon
+   */
+  const handleOzonPageChange = (page: number) => {
+    setOzonCurrentPage(page);
+    
+    // Обновление данных при изменении страницы
+    if (selectedLegalEntity) {
+      // Обновляем данные с небольшой задержкой, чтобы страница успела обновиться
+      setTimeout(() => {
+        loadOzonOrders(selectedLegalEntity);
+      }, 100);
+    }
+  };
+
+  /**
+   * Обработчик изменения страницы для Yandex Market
+   */
+  const handleYmPageChange = (page: number) => {
+    setYmCurrentPage(page);
+    
+    // Обновление данных при изменении страницы
+    if (selectedLegalEntity && selectedMarketplace === 'yandex-market') {
+      // Обновляем данные с небольшой задержкой, чтобы страница успела обновиться
+      setTimeout(() => {
+        loadYandexMarketOrders(selectedLegalEntity);
+      }, 100);
+    }
+  };
+
+  /**
    * Получение пагинации для Wildberries с учетом фильтрации
    */
   const getWbPagination = () => {
@@ -1782,14 +1827,20 @@ const Dashboard: React.FC = () => {
     
     // Если текущая страница больше общего количества страниц
     if (wbCurrentPage > totalPages && totalPages > 0) {
+      // Сбрасываем на первую страницу и обновляем данные
       setWbCurrentPage(1);
+      if (selectedLegalEntity) {
+        setTimeout(() => {
+          loadWildberriesOrders(selectedLegalEntity);
+        }, 100);
+      }
     }
     
     return (
       <PaginationComponent
         currentPage={wbCurrentPage}
         totalPages={totalPages}
-        onPageChange={(page) => setWbCurrentPage(page)}
+        onPageChange={handleWbPageChange}
       />
     );
   };
@@ -1803,14 +1854,20 @@ const Dashboard: React.FC = () => {
     
     // Если текущая страница больше общего количества страниц
     if (ozonCurrentPage > totalPages && totalPages > 0) {
+      // Сбрасываем на первую страницу и обновляем данные
       setOzonCurrentPage(1);
+      if (selectedLegalEntity) {
+        setTimeout(() => {
+          loadOzonOrders(selectedLegalEntity);
+        }, 100);
+      }
     }
     
     return (
       <PaginationComponent
         currentPage={ozonCurrentPage}
         totalPages={totalPages}
-        onPageChange={(page) => setOzonCurrentPage(page)}
+        onPageChange={handleOzonPageChange}
       />
     );
   };
@@ -1831,9 +1888,45 @@ const Dashboard: React.FC = () => {
       <PaginationComponent
         currentPage={ymCurrentPage}
         totalPages={totalPages}
-        onPageChange={(page) => setYmCurrentPage(page)}
+        onPageChange={handleYmPageChange}
       />
     );
+  };
+
+  /**
+   * Обработчик выделения всех заказов Wildberries (не только на текущей странице)
+   */
+  const handleSelectAllWbFiltered = () => {
+    const filteredOrders = getFilteredWbOrders();
+    const allOrderIds = filteredOrders.map(order => order.id || order.order_id || '');
+    setSelectedWbOrders(new Set(allOrderIds));
+    setSelectAllWb(true);
+    
+    // Показываем сообщение о количестве выбранных заказов
+    alert(`Выбрано ${filteredOrders.length} заказов`);
+  };
+
+  /**
+   * Обработчик выделения всех заказов Ozon (не только на текущей странице)
+   */
+  const handleSelectAllOzonFiltered = () => {
+    const filteredOrders = getFilteredOzonOrders();
+    const allOrderIds = filteredOrders.map(order => order.id || order.order_id || '');
+    setSelectedOzonOrders(new Set(allOrderIds));
+    setSelectAllOzon(true);
+    
+    // Показываем сообщение о количестве выбранных заказов
+    alert(`Выбрано ${filteredOrders.length} заказов`);
+  };
+
+  /**
+   * Обработчик выделения всех заказов Yandex Market (не только на текущей странице)
+   */
+  const handleSelectAllYmFiltered = () => {
+    const filteredOrders = getFilteredYmOrders();
+    const allOrderIds = filteredOrders.map(order => order.id || order.order_id || '');
+    setSelectedYmOrders(new Set(allOrderIds));
+    setSelectAllYm(true);
   };
 
   return (
@@ -1963,7 +2056,7 @@ const Dashboard: React.FC = () => {
                   </Alert>
                 )}
                 
-                <div className="mb-2">
+                <div className="mb-3">
                   <Button
                     variant="primary"
                     size="sm"
@@ -2003,6 +2096,15 @@ const Dashboard: React.FC = () => {
                   </Button>
 
                   <Button 
+                    variant="outline-info" 
+                    size="sm" 
+                    onClick={handleSelectAllWbFiltered}
+                    className="me-2"
+                  >
+                    <i className="bi bi-check-all me-1"></i> Выделить все заказы
+                  </Button>
+
+                  <Button 
                     variant={wbStatusConfirm ? "outline-info" : "outline-warning"} 
                     size="sm" 
                     onClick={handleToggleWbOrders}
@@ -2015,6 +2117,7 @@ const Dashboard: React.FC = () => {
                 {/* Кнопки фильтрации по статусам Wildberries */}
                 <div className="mb-3">
                   <div>
+                    <h6 className="mb-2">Статус Wildberries:</h6>
                     <Form.Select
                       value={wbStatusWbFilter || ''}
                       onChange={(e) => setWbStatusWbFilter(e.target.value || null)}
@@ -2024,6 +2127,7 @@ const Dashboard: React.FC = () => {
                       <option value="new">Новый</option>
                       <option value="confirm">Подтвержден</option>
                       <option value="cancel">Отменен</option>
+                      <option value="complete">Выполнен</option>
                     </Form.Select>
                   </div>
                 </div>
@@ -2257,6 +2361,15 @@ const Dashboard: React.FC = () => {
                     className="me-2"
                   >
                     <i className="bi bi-database me-1"></i> Обновить БД
+                  </Button>
+
+                  <Button 
+                    variant="outline-info" 
+                    size="sm" 
+                    onClick={handleSelectAllOzonFiltered}
+                    className="me-2"
+                  >
+                    <i className="bi bi-check-all me-1"></i> Выделить все заказы
                   </Button>
                 </div>
 
@@ -2502,6 +2615,15 @@ const Dashboard: React.FC = () => {
                     className="me-2"
                   >
                     <i className="bi bi-arrow-repeat me-1"></i> Обновить
+                  </Button>
+
+                  <Button 
+                    variant="outline-info" 
+                    size="sm" 
+                    onClick={handleSelectAllYmFiltered}
+                    className="me-2"
+                  >
+                    <i className="bi bi-check-all me-1"></i> Выделить все заказы
                   </Button>
                 </div>
 
