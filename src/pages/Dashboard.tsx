@@ -1854,7 +1854,7 @@ const Dashboard: React.FC = () => {
                   </Alert>
                 )}
                 
-                <div className="mb-3">
+                <div className="mb-2">
                   <Button
                     variant="primary"
                     size="sm"
@@ -1906,7 +1906,6 @@ const Dashboard: React.FC = () => {
                 {/* Кнопки фильтрации по статусам Wildberries */}
                 <div className="mb-3">
                   <div>
-                    <h6 className="mb-2">Статус WB:</h6>
                     <Form.Select
                       value={wbStatusWbFilter || ''}
                       onChange={(e) => setWbStatusWbFilter(e.target.value || null)}
@@ -2156,45 +2155,23 @@ const Dashboard: React.FC = () => {
                   </Button>
                 </div>
 
-                {/* Кнопки фильтрации по статусам Ozon */}
+                {/* Фильтрация по статусам Ozon */}
                 <div className="mb-3">
-                  <ButtonGroup>
-                    <Button
-                      variant={ozonStatusFilter === null ? "primary" : "outline-primary"}
-                      size="sm"
-                      onClick={() => setOzonStatusFilter(null)}
+                  <div>
+                    <h6 className="mb-2">Статус Ozon:</h6>
+                    <Form.Select
+                      value={ozonStatusFilter || ''}
+                      onChange={(e) => setOzonStatusFilter(e.target.value || null)}
+                      className="w-auto"
                     >
-                      Все
-                    </Button>
-                    <Button
-                      variant={ozonStatusFilter === 'new' ? "primary" : "outline-primary"}
-                      size="sm"
-                      onClick={() => setOzonStatusFilter('new')}
-                    >
-                      Новые
-                    </Button>
-                    <Button
-                      variant={ozonStatusFilter === 'processing' ? "primary" : "outline-primary"}
-                      size="sm"
-                      onClick={() => setOzonStatusFilter('processing')}
-                    >
-                      В обработке
-                    </Button>
-                    <Button
-                      variant={ozonStatusFilter === 'ready_to_ship' ? "primary" : "outline-primary"}
-                      size="sm"
-                      onClick={() => setOzonStatusFilter('ready_to_ship')}
-                    >
-                      Готовы к отправке
-                    </Button>
-                    <Button
-                      variant={ozonStatusFilter === 'shipped' ? "primary" : "outline-primary"}
-                      size="sm"
-                      onClick={() => setOzonStatusFilter('shipped')}
-                    >
-                      Отправлены
-                    </Button>
-                  </ButtonGroup>
+                      <option value="">Все</option>
+                      <option value="awaiting_packaging">Ожидает упаковки</option>
+                      <option value="awaiting_deliver">Ожидает доставки</option>
+                      <option value="delivering">Доставляется</option>
+                      <option value="delivered">Доставлен</option>
+                      <option value="cancelled">Отменен</option>
+                    </Form.Select>
+                  </div>
                 </div>
                 
                 {ozonOrdersLoading ? (
@@ -2226,6 +2203,13 @@ const Dashboard: React.FC = () => {
                             />
                           </th>
                           <SortableColumnHeader
+                            column="posting_number"
+                            title="Номер отправления"
+                            currentSortColumn={ozonSortColumn}
+                            currentSortDirection={ozonSortDirection}
+                            onSort={handleOzonSort}
+                          />
+                          <SortableColumnHeader
                             column="order_id"
                             title="ID заказа"
                             currentSortColumn={ozonSortColumn}
@@ -2233,7 +2217,7 @@ const Dashboard: React.FC = () => {
                             onSort={handleOzonSort}
                           />
                           <SortableColumnHeader
-                            column="created_at"
+                            column="in_process_at"
                             title="Дата создания"
                             currentSortColumn={ozonSortColumn}
                             currentSortDirection={ozonSortDirection}
@@ -2241,14 +2225,14 @@ const Dashboard: React.FC = () => {
                             isDateColumn={true}
                           />
                           <SortableColumnHeader
-                            column="product_name"
-                            title="Название"
+                            column="products.name"
+                            title="Название товара"
                             currentSortColumn={ozonSortColumn}
                             currentSortDirection={ozonSortDirection}
                             onSort={handleOzonSort}
                           />
                           <SortableColumnHeader
-                            column="sku"
+                            column="products.sku"
                             title="Артикул"
                             currentSortColumn={ozonSortColumn}
                             currentSortDirection={ozonSortDirection}
@@ -2262,26 +2246,34 @@ const Dashboard: React.FC = () => {
                             onSort={handleOzonSort}
                           />
                           <SortableColumnHeader
-                            column="price"
+                            column="own_status"
+                            title="Внутренний статус"
+                            currentSortColumn={ozonSortColumn}
+                            currentSortDirection={ozonSortDirection}
+                            onSort={handleOzonSort}
+                          />
+                          <SortableColumnHeader
+                            column="products.price"
                             title="Цена продажи"
                             currentSortColumn={ozonSortColumn}
                             currentSortDirection={ozonSortDirection}
                             onSort={handleOzonSort}
                           />
                           <SortableColumnHeader
-                            column="city"
+                            column="delivery_method.warehouse"
                             title="Склад"
                             currentSortColumn={ozonSortColumn}
                             currentSortDirection={ozonSortDirection}
                             onSort={handleOzonSort}
                           />
                           <SortableColumnHeader
-                            column="delivery_type"
+                            column="delivery_method.name"
                             title="Способ доставки"
                             currentSortColumn={ozonSortColumn}
                             currentSortDirection={ozonSortDirection}
                             onSort={handleOzonSort}
                           />
+                          <th>Стикер</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -2295,18 +2287,36 @@ const Dashboard: React.FC = () => {
                                 aria-label={`Выбрать заказ ${order.id || order.order_id || index}`}
                               />
                             </td>
+                            <td>{order.posting_number || '—'}</td>
                             <td>{order.order_id || '—'}</td>
                             <td>{formatDate(order.in_process_at || order.created_at || order.created_date)}</td>
-                            <td>{order.product_name || order.name || '—'}</td>
-                            <td>{order.sku || order.offer_id || '—'}</td>
+                            <td>{order.products?.[0]?.name || order.product_name || order.name || '—'}</td>
+                            <td>{order.products?.[0]?.sku || order.sku || order.offer_id || '—'}</td>
                             <td>
                               <Badge bg={getBadgeColor(order.status)}>
                                 {getStatusText(order.status)}
                               </Badge>
                             </td>
-                            <td>{formatPrice(order.price || order.sale_price)}</td>
-                            <td>{order.city || (order.delivery_method && order.delivery_method.warehouse ? order.delivery_method.warehouse.split(',')[0] : '—')}</td>
-                            <td>{order.delivery_type || (order.delivery_method ? order.delivery_method.name : '—')}</td>
+                            <td>
+                              <Badge bg={getBadgeColor(order.own_status)}>
+                                {getStatusText(order.own_status)}
+                              </Badge>
+                            </td>
+                            <td>{formatPrice(order.products?.[0]?.price || order.price || order.sale_price)}</td>
+                            <td>{order.delivery_method?.warehouse || '—'}</td>
+                            <td>{order.delivery_method?.name || '—'}</td>
+                            <td>
+                              {order.sticker_pdf ? (
+                                <Button 
+                                  variant="outline-primary" 
+                                  size="sm"
+                                  onClick={() => window.open(`http://62.113.44.196:8080${order.sticker_pdf}`, '_blank')}
+                                  title="Скачать стикер"
+                                >
+                                  <i className="bi bi-download"></i>
+                                </Button>
+                              ) : '—'}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
