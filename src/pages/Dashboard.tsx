@@ -115,6 +115,22 @@ const Dashboard: React.FC = () => {
   const [selectedWbOrder, setSelectedWbOrder] = useState<WbOrder | null>(null);
   const [showWbModal, setShowWbModal] = useState(false);
 
+  // Обновляем useEffect для сброса текущей страницы при изменении фильтров
+  useEffect(() => {
+    // Сброс текущей страницы Wildberries при изменении фильтра WB
+    setWbCurrentPage(1);
+  }, [wbStatusWbFilter]);
+
+  useEffect(() => {
+    // Сброс текущей страницы Ozon при изменении фильтра Ozon
+    setOzonCurrentPage(1);
+  }, [ozonStatusFilter]);
+
+  useEffect(() => {
+    // Сброс текущей страницы Yandex Market при изменении фильтра Yandex Market
+    setYmCurrentPage(1);
+  }, [ymStatusFilter]);
+
   /**
    * Загрузка списка юридических лиц с сервера
    */
@@ -1055,7 +1071,12 @@ const Dashboard: React.FC = () => {
    */
   const getCurrentPageWbOrders = () => {
     const filteredOrders = getFilteredWbOrders();
-    const indexOfLastItem = wbCurrentPage * wbItemsPerPage;
+    const totalPages = Math.ceil(filteredOrders.length / wbItemsPerPage);
+    
+    // Убедимся, что текущая страница не выходит за пределы количества страниц
+    const currentPage = Math.min(wbCurrentPage, Math.max(totalPages, 1));
+    
+    const indexOfLastItem = currentPage * wbItemsPerPage;
     const indexOfFirstItem = indexOfLastItem - wbItemsPerPage;
     return filteredOrders.slice(indexOfFirstItem, indexOfLastItem);
   };
@@ -1147,7 +1168,12 @@ const Dashboard: React.FC = () => {
    */
   const getCurrentPageOzonOrders = () => {
     const filteredOrders = getFilteredOzonOrders();
-    const indexOfLastItem = ozonCurrentPage * ozonItemsPerPage;
+    const totalPages = Math.ceil(filteredOrders.length / ozonItemsPerPage);
+    
+    // Убедимся, что текущая страница не выходит за пределы количества страниц
+    const currentPage = Math.min(ozonCurrentPage, Math.max(totalPages, 1));
+    
+    const indexOfLastItem = currentPage * ozonItemsPerPage;
     const indexOfFirstItem = indexOfLastItem - ozonItemsPerPage;
     return filteredOrders.slice(indexOfFirstItem, indexOfLastItem);
   };
@@ -1227,7 +1253,12 @@ const Dashboard: React.FC = () => {
    */
   const getCurrentPageYmOrders = () => {
     const filteredOrders = getFilteredYmOrders();
-    const indexOfLastItem = ymCurrentPage * ymItemsPerPage;
+    const totalPages = Math.ceil(filteredOrders.length / ymItemsPerPage);
+    
+    // Убедимся, что текущая страница не выходит за пределы количества страниц
+    const currentPage = Math.min(ymCurrentPage, Math.max(totalPages, 1));
+    
+    const indexOfLastItem = currentPage * ymItemsPerPage;
     const indexOfFirstItem = indexOfLastItem - ymItemsPerPage;
     return filteredOrders.slice(indexOfFirstItem, indexOfLastItem);
   };
@@ -1727,6 +1758,69 @@ const Dashboard: React.FC = () => {
     return filteredOrders;
   };
 
+  /**
+   * Получение пагинации для Wildberries с учетом фильтрации
+   */
+  const getWbPagination = () => {
+    const filteredOrders = getFilteredWbOrders();
+    const totalPages = Math.ceil(filteredOrders.length / wbItemsPerPage);
+    
+    // Если текущая страница больше общего количества страниц
+    if (wbCurrentPage > totalPages && totalPages > 0) {
+      setWbCurrentPage(1);
+    }
+    
+    return (
+      <PaginationComponent
+        currentPage={wbCurrentPage}
+        totalPages={totalPages}
+        onPageChange={(page) => setWbCurrentPage(page)}
+      />
+    );
+  };
+
+  /**
+   * Получение пагинации для Ozon с учетом фильтрации
+   */
+  const getOzonPagination = () => {
+    const filteredOrders = getFilteredOzonOrders();
+    const totalPages = Math.ceil(filteredOrders.length / ozonItemsPerPage);
+    
+    // Если текущая страница больше общего количества страниц
+    if (ozonCurrentPage > totalPages && totalPages > 0) {
+      setOzonCurrentPage(1);
+    }
+    
+    return (
+      <PaginationComponent
+        currentPage={ozonCurrentPage}
+        totalPages={totalPages}
+        onPageChange={(page) => setOzonCurrentPage(page)}
+      />
+    );
+  };
+
+  /**
+   * Получение пагинации для Yandex Market с учетом фильтрации
+   */
+  const getYmPagination = () => {
+    const filteredOrders = getFilteredYmOrders();
+    const totalPages = Math.ceil(filteredOrders.length / ymItemsPerPage);
+    
+    // Если текущая страница больше общего количества страниц
+    if (ymCurrentPage > totalPages && totalPages > 0) {
+      setYmCurrentPage(1);
+    }
+    
+    return (
+      <PaginationComponent
+        currentPage={ymCurrentPage}
+        totalPages={totalPages}
+        onPageChange={(page) => setYmCurrentPage(page)}
+      />
+    );
+  };
+
   return (
     <Container fluid className="dashboard-container">
 
@@ -2064,11 +2158,7 @@ const Dashboard: React.FC = () => {
                       </tbody>
                     </Table>
                     {wbOrders.length > 0 && (
-                      <PaginationComponent
-                        currentPage={wbCurrentPage}
-                        totalPages={Math.ceil(wbOrders.length / wbItemsPerPage)}
-                        onPageChange={(page) => setWbCurrentPage(page)}
-                      />
+                      getWbPagination()
                     )}
                   </div>
                 )}
@@ -2322,11 +2412,7 @@ const Dashboard: React.FC = () => {
                       </tbody>
                     </Table>
                     {ozonOrders.length > 0 && (
-                      <PaginationComponent
-                        currentPage={ozonCurrentPage}
-                        totalPages={Math.ceil(ozonOrders.length / ozonItemsPerPage)}
-                        onPageChange={(page) => setOzonCurrentPage(page)}
-                      />
+                      getOzonPagination()
                     )}
                   </div>
                 )}
@@ -2576,11 +2662,7 @@ const Dashboard: React.FC = () => {
                       </tbody>
                     </Table>
                     {ymOrders.length > 0 && (
-                      <PaginationComponent
-                        currentPage={ymCurrentPage}
-                        totalPages={Math.ceil(ymOrders.length / ymItemsPerPage)}
-                        onPageChange={(page) => setYmCurrentPage(page)}
-                      />
+                      getYmPagination()
                     )}
                   </div>
                 )}
