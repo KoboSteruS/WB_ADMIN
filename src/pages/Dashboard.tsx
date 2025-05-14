@@ -1734,6 +1734,35 @@ const Dashboard: React.FC = () => {
   };
 
   /**
+   * Обновление базы данных Яндекс Маркет
+   */
+  const updateYandexMarketDatabase = async () => {
+    try {
+      setYmOrdersLoading(true);
+      const response = await fetch('http://62.113.44.196:8080/api/v1/yandex-market-orders/update/', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ошибка HTTP: ${response.status}`);
+      }
+
+      // После успешного обновления БД, перезагружаем заказы
+      if (selectedLegalEntity) {
+        await loadYandexMarketOrders(selectedLegalEntity);
+      }
+    } catch (error) {
+      console.error('Ошибка при обновлении БД Яндекс Маркет:', error);
+      setYmOrdersError(error instanceof Error ? error.message : 'Произошла ошибка при обновлении БД');
+    } finally {
+      setYmOrdersLoading(false);
+    }
+  };
+
+  /**
    * Получение отфильтрованных заказов Wildberries
    */
   const getFilteredWbOrders = () => {
@@ -1984,6 +2013,154 @@ const Dashboard: React.FC = () => {
       
       // Показываем понятное сообщение об ошибке
       let errorMessage = 'Не удалось объединить стикеры';
+      if (error instanceof Error) {
+        errorMessage += `: ${error.message}`;
+      }
+      alert(errorMessage);
+    }
+  };
+
+  /**
+   * Обработчик добавления заказов Ozon в поставку
+   */
+  const handleAddOzonToSupply = async () => {
+    if (selectedOzonOrders.size === 0) {
+      setStatusChangeError('Выберите хотя бы один заказ для добавления в поставку');
+      return;
+    }
+
+    setStatusChangeLoading(true);
+    setStatusChangeError(null);
+    setStatusChangeSuccess(false);
+
+    try {
+      // Получаем данные выбранных заказов
+      const selectedOrdersData = getSelectedOzonOrdersData();
+      
+      // Проверяем наличие данных
+      if (selectedOrdersData.length === 0) {
+        throw new Error('Не удалось получить данные выбранных заказов');
+      }
+      
+      // Получаем ozon_token_id из первого заказа или используем значение по умолчанию
+      let ozon_token_id = 1;
+      const firstSelectedOrder = selectedOrdersData[0];
+      if (firstSelectedOrder && firstSelectedOrder.ozon_token) {
+        ozon_token_id = firstSelectedOrder.ozon_token;
+      }
+      
+      // Получаем posting_numbers из выбранных заказов
+      const posting_numbers = selectedOrdersData
+        .filter(order => order.posting_number) // Фильтруем только заказы с номером отправления
+        .map(order => order.posting_number || '');  // Получаем номера отправлений
+      
+      if (posting_numbers.length === 0) {
+        throw new Error('У выбранных заказов отсутствуют номера отправлений');
+      }
+      
+      console.log('Отправляем заказы в поставку:', posting_numbers);
+      console.log('ID токена Ozon:', ozon_token_id);
+      
+      // Отправляем запрос на добавление в поставку
+      const response = await fetch(
+        `http://62.113.44.196:8080/api/v1/ozon-orders/add-to-supply/?ozon_token_id=${encodeURIComponent(ozon_token_id)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Token 4e5cee7ce7f660fd6a00793bc33401016655e133',
+            'Accept': 'application/json',
+            'X-CSRFTOKEN': 'P8r0lZl1tB9EHOBbJ8RnD27omtlYU5SB3gPAw3N0IMMuG3w6T7q2H7WWp6xD2LG0',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            posting_numbers: posting_numbers
+          })
+        }
+      );
+
+      const text = await response.text();
+      let resultMessage = '';
+      
+      try {
+        const data = JSON.parse(text);
+        console.log('Ответ от сервера (JSON):', data.response);
+        resultMessage = data.response || 'Заказы успешно добавлены в поставку';
+      } catch (e) {
+        console.log('Ответ от сервера (ТЕКСТ):', text);
+        resultMessage = 'Заказы отправлены в поставку';
+      }
+
+      setStatusChangeSuccess(true);
+      alert(resultMessage);
+      
+      // Обновляем данные заказов
+      setTimeout(() => {
+        if (selectedLegalEntity) {
+          loadOzonOrders(selectedLegalEntity);
+        }
+      }, 1500);
+    } catch (error) {
+      console.error('Ошибка запроса:', error);
+      setStatusChangeError(error instanceof Error ? error.message : 'Произошла ошибка при добавлении заказов в поставку');
+      alert(`Ошибка: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setStatusChangeLoading(false);
+    }
+  };
+
+  /**
+   * Объединяет выбранные стикеры Яндекс Маркет в один PDF-файл
+   */
+  const handleMergeYandexStickers = async () => {
+    // Используем выбранные заказы или все отфильтрованные, если ничего не выбрано
+    const ordersToUse = selectedYmOrders.size > 0
+      ? getSelectedYandexOrdersData()
+      : getFilteredYmOrders();
+    
+    // Фильтруем только заказы со стикерами
+    const ordersWithStickers = ordersToUse.filter(order => order.sticker_pdf);
+    
+    if (ordersWithStickers.length === 0) {
+      alert('Нет заказов Яндекс Маркет со стикерами для объединения');
+      return;
+    }
+    
+    try {
+      // Показываем индикатор загрузки
+      setStatusChangeLoading(true);
+      
+      // Получаем URLs стикеров
+      const stickerUrls = ordersWithStickers.map(order => order.sticker_pdf || '');
+      
+      // Отображаем информацию о количестве обрабатываемых стикеров
+      const statusMessage = `Объединение ${stickerUrls.length} стикеров Яндекс Маркет...`;
+      setStatusChangeMessage(statusMessage);
+      
+      // Объединяем PDF-файлы
+      const mergedPdfBlob = await mergePDFsInOrder(stickerUrls);
+      
+      // Формируем имя файла с текущей датой и временем
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('ru-RU').replace(/\./g, '-');
+      const timeStr = now.toLocaleTimeString('ru-RU').replace(/:/g, '-');
+      const fileName = `yandex-stickers-${dateStr}-${timeStr}.pdf`;
+      
+      // Скачиваем объединенный PDF
+      downloadBlob(mergedPdfBlob, fileName);
+      
+      // Убираем индикатор загрузки
+      setStatusChangeLoading(false);
+      setStatusChangeMessage('');
+      
+      // Выводим сообщение об успешном объединении
+      alert(`Успешно объединено ${stickerUrls.length} стикеров Яндекс Маркет`);
+    } catch (error) {
+      console.error('Ошибка при объединении стикеров Яндекс Маркет:', error);
+      setStatusChangeLoading(false);
+      setStatusChangeMessage('');
+      
+      // Показываем понятное сообщение об ошибке
+      let errorMessage = 'Не удалось объединить стикеры Яндекс Маркет';
       if (error instanceof Error) {
         errorMessage += `: ${error.message}`;
       }
@@ -2416,6 +2593,26 @@ const Dashboard: React.FC = () => {
                     )}
                   </Button>
                   
+                  <Button
+                    variant="success"
+                    size="sm"
+                    onClick={handleAddOzonToSupply}
+                    disabled={selectedOzonOrders.size === 0 || statusChangeLoading}
+                    className="me-2"
+                  >
+                    {statusChangeLoading ? (
+                      <>
+                        <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
+                        Добавление...
+                      </>
+                    ) : (
+                      <>
+                        <i className="bi bi-box-seam me-2"></i>
+                        Добавить в поставку ({selectedOzonOrders.size})
+                      </>
+                    )}
+                  </Button>
+                  
                   <Button 
                     variant="outline-primary" 
                     size="sm" 
@@ -2699,6 +2896,15 @@ const Dashboard: React.FC = () => {
                   </Button>
 
                   <Button 
+                    variant="outline-success" 
+                    size="sm" 
+                    onClick={updateYandexMarketDatabase}
+                    className="me-2"
+                  >
+                    <i className="bi bi-database me-1"></i> Обновить БД
+                  </Button>
+
+                  <Button 
                     variant="outline-info" 
                     size="sm" 
                     onClick={handleSelectAllYmFiltered}
@@ -2706,47 +2912,38 @@ const Dashboard: React.FC = () => {
                   >
                     <i className="bi bi-check-all me-1"></i> Выделить все заказы
                   </Button>
+
+                  <Button 
+                    variant="outline-success" 
+                    size="sm" 
+                    onClick={handleMergeYandexStickers}
+                    className="me-2"
+                    title="Объединить стикеры выбранных заказов в один PDF"
+                  >
+                    <i className="bi bi-file-earmark-pdf me-1"></i> Объединить стикеры
+                  </Button>
                 </div>
 
-                {/* Кнопки фильтрации по статусам Яндекс Маркет */}
+                {/* Фильтрация по статусам Яндекс Маркет */}
                 <div className="mb-3">
-                  <ButtonGroup>
-                    <Button
-                      variant={ymStatusFilter === null ? "primary" : "outline-primary"}
-                      size="sm"
-                      onClick={() => setYmStatusFilter(null)}
+                  <div>
+                    <h6 className="mb-2">Статус Яндекс Маркет:</h6>
+                    <Form.Select
+                      value={ymStatusFilter || ''}
+                      onChange={(e) => setYmStatusFilter(e.target.value || null)}
+                      className="w-auto"
                     >
-                      Все
-                    </Button>
-                    <Button
-                      variant={ymStatusFilter === 'new' ? "primary" : "outline-primary"}
-                      size="sm"
-                      onClick={() => setYmStatusFilter('new')}
-                    >
-                      Новые
-                    </Button>
-                    <Button
-                      variant={ymStatusFilter === 'processing' ? "primary" : "outline-primary"}
-                      size="sm"
-                      onClick={() => setYmStatusFilter('processing')}
-                    >
-                      В обработке
-                    </Button>
-                    <Button
-                      variant={ymStatusFilter === 'ready_to_ship' ? "primary" : "outline-primary"}
-                      size="sm"
-                      onClick={() => setYmStatusFilter('ready_to_ship')}
-                    >
-                      Готовы к отправке
-                    </Button>
-                    <Button
-                      variant={ymStatusFilter === 'shipped' ? "primary" : "outline-primary"}
-                      size="sm"
-                      onClick={() => setYmStatusFilter('shipped')}
-                    >
-                      Отправлены
-                    </Button>
-                  </ButtonGroup>
+                      <option value="">Все</option>
+                      <option value="new">Новый</option>
+                      <option value="PROCESSING">В обработке</option>
+                      <option value="READY_TO_SHIP">Готов к отправке</option>
+                      <option value="SHIPPED">Отправлен</option>
+                      <option value="DELIVERED">Доставлен</option>
+                      <option value="CANCELLED">Отменен</option>
+                      <option value="PICKUP">Самовывоз</option>
+                      <option value="DELIVERY">Доставка</option>
+                    </Form.Select>
+                  </div>
                 </div>
                 
                 {ymOrdersLoading ? (
@@ -2848,6 +3045,7 @@ const Dashboard: React.FC = () => {
                             currentSortDirection={ymSortDirection}
                             onSort={handleYmSort}
                           />
+                          <th>Стикер</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -2875,6 +3073,18 @@ const Dashboard: React.FC = () => {
                             <td>{order.delivery_type || order.delivery_service_name || '—'}</td>
                             <td>{order.customer_name || '—'}</td>
                             <td>{order.delivery_address || '—'}</td>
+                            <td>
+                              {order.sticker_pdf ? (
+                                <Button 
+                                  variant="outline-primary" 
+                                  size="sm"
+                                  onClick={() => window.open(`http://62.113.44.196:8080${order.sticker_pdf}`, '_blank')}
+                                  title="Скачать стикер"
+                                >
+                                  <i className="bi bi-download"></i>
+                                </Button>
+                              ) : '—'}
+                            </td>
                           </tr>
                         ))}
                       </tbody>

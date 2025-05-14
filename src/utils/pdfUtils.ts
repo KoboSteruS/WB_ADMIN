@@ -209,8 +209,8 @@ export const addTableToPDF = (
   
   // Настройки для заголовков
   const headerStyles = {
-    fillColor: [66, 139, 202], // синий фон
-    textColor: [255, 255, 255], // белый текст
+    fillColor: [66, 139, 202] as [number, number, number], // синий фон с явной типизацией
+    textColor: [255, 255, 255] as [number, number, number], // белый текст с явной типизацией
     fontSize: options.fontSize || 10,
     font: 'Roboto',
     halign: 'center',
@@ -267,7 +267,7 @@ export const addTableToPDF = (
 /**
  * Добавляет таблицу с кириллицей (альтернативное название)
  */
-export const addCyrillicTable = addTableToPDF;
+export const addCyrillicTable = addTableToPDF; 
 
 /**
  * Объединяет несколько PDF файлов в один по указанным URL
