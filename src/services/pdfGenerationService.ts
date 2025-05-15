@@ -449,6 +449,12 @@ export const generateOzonReportsPDF = async (
     await generateOzonOrdersListPDF(orders, legalEntity);
     await generateOzonStickersPDF(orders);
     
+    // Добавляем генерацию PDF со штрих-кодами поставок, если они есть
+    await generateOzonSupplyStickersPDF(orders);
+    
+    // Добавляем генерацию PDF с изображениями штрих-кодов, если они есть
+    await generateOzonBarcodeImagesPDF(orders);
+    
     console.log('Все PDF-файлы для Ozon успешно сгенерированы');
     alert('PDF-файлы для Ozon успешно сгенерированы и сохранены');
   } catch (error) {
@@ -465,7 +471,7 @@ export const generateOzonArticlesSummaryPDF = async (
   legalEntity?: LegalEntity
 ): Promise<void> => {
   // Проверяем, есть ли заказы
-  if (orders.length === 0) {
+    if (orders.length === 0) {
     console.log('Нет заказов Ozon для создания сводки');
     return;
   }
@@ -555,7 +561,7 @@ export const generateOzonArticlesSummaryPDF = async (
     
     // Сохраняем PDF
     const filename = `Ozon_Orders_Summary_${timestamp}.pdf`;
-    doc.save(filename);
+      doc.save(filename);
     console.log('PDF со сводкой по заказам Ozon сгенерирован');
   } catch (error) {
     console.error('Ошибка при генерации PDF для Ozon:', error);
@@ -572,9 +578,9 @@ export const generateOzonOrdersListPDF = async (
 ): Promise<void> => {
   if (orders.length === 0) {
     console.log('Нет заказов Ozon для создания списка');
-    return;
-  }
-  
+      return;
+    }
+    
   try {
     // Создаем PDF документ в альбомной ориентации
     const doc = await createPDFWithCyrillicSupport({ orientation: 'landscape' });
@@ -602,6 +608,9 @@ export const generateOzonOrdersListPDF = async (
         sku = String(order.sku || order.offer_id || '');
       }
       
+      // Добавляем информацию о штрих-коде поставки, если она есть
+      const supplyBarcodeText = order.supply_barcode_text || '-';
+      
       return [
         order.posting_number || order.order_id || '',
         sku,
@@ -611,6 +620,7 @@ export const generateOzonOrdersListPDF = async (
         formatDate(order.in_process_at || order.created_at || order.created_date || ''),
         order.delivery_method?.warehouse || order.city || '',
         order.delivery_method?.name || order.delivery_type || '',
+        supplyBarcodeText,
         order.customer?.name || order.customer_name || ''
       ].map(String);
     });
@@ -618,7 +628,7 @@ export const generateOzonOrdersListPDF = async (
     // Заголовки таблицы
     const headers = [
       'Номер', 'Артикул', 'Товар', 'Статус', 'Цена', 
-      'Дата', 'Склад', 'Доставка', 'Клиент'
+      'Дата', 'Склад', 'Доставка', 'Штрих-код поставки', 'Клиент'
     ];
     
     // Добавляем таблицу
@@ -650,7 +660,8 @@ export const generateOzonOrdersListPDF = async (
         5: { halign: 'center', font: 'Roboto', fontStyle: 'normal' },
         6: { halign: 'left', font: 'Roboto', fontStyle: 'normal' },
         7: { halign: 'left', font: 'Roboto', fontStyle: 'normal' },
-        8: { halign: 'left', font: 'Roboto', fontStyle: 'normal' }
+        8: { halign: 'left', font: 'Roboto', fontStyle: 'normal' },
+        9: { halign: 'left', font: 'Roboto', fontStyle: 'normal' }
       }
     });
     
@@ -691,6 +702,239 @@ export const generateOzonStickersPDF = async (orders: OzonOrder[]) => {
   } catch (error) {
     console.error('Ошибка при генерации PDF со стикерами Ozon:', error);
     alert(`Ошибка при генерации стикеров Ozon: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+/**
+ * Генерация PDF со штрих-кодами поставок Ozon
+ */
+export const generateOzonSupplyStickersPDF = async (orders: OzonOrder[]) => {
+  try {
+    // Отбираем только заказы с supply_barcode_image
+    const ordersWithBarcodes = orders.filter(order => order.supply_barcode_image);
+    
+    if (ordersWithBarcodes.length === 0) {
+      console.log('Нет заказов Ozon со штрих-кодами поставок');
+      return; // Тихо возвращаемся, без уведомления, т.к. это необязательная опция
+    }
+    
+    // Создаем временную папку для хранения отдельных PDF
+    const blobsArray: Blob[] = [];
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    
+    // Для каждого штрих-кода создаем отдельный PDF с правильным размером
+    for (const order of ordersWithBarcodes) {
+      // Пропускаем заказы без штрих-кода
+      if (!order.supply_barcode_image) {
+        continue;
+      }
+      
+      try {
+        // Точные размеры стикера
+        const PDF_WIDTH = 58; // ширина стикера в мм
+        const PDF_HEIGHT = 40; // высота стикера в мм
+        
+        // Создаем PDF документ с заданным размером
+    const pdfDoc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+          format: [PDF_WIDTH, PDF_HEIGHT], // Точный размер стикера
+      hotfixes: ['px_scaling'] // Исправление для масштабирования пикселей
+    });
+    
+        // Полный URL для изображения штрих-кода
+        const barcodeUrl = `http://62.113.44.196:8080${order.supply_barcode_image}`;
+        
+        // Создаем изображение из URL или base64 (в зависимости от формата)
+        const img = new Image();
+        img.crossOrigin = 'Anonymous'; // Разрешаем кросс-доменные запросы
+        img.src = barcodeUrl; 
+        
+        // Ждем загрузки изображения
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = (error) => reject(error);
+          // Добавляем таймаут для загрузки изображения
+          setTimeout(() => reject(new Error('Таймаут загрузки изображения')), 10000);
+        });
+        
+        // Добавляем штрих-код на страницу
+          pdfDoc.addImage(
+            img, 
+          'JPEG', 
+            0, // x - начинаем с левого края
+            0, // y - начинаем с верхнего края
+          PDF_WIDTH, // используем всю ширину
+          PDF_HEIGHT // используем всю высоту
+          );
+          
+        // Если есть текст штрих-кода, добавляем его внизу
+        if (order.supply_barcode_text) {
+          pdfDoc.setFontSize(8);
+          pdfDoc.setTextColor(0, 0, 0);
+          pdfDoc.text(
+            order.supply_barcode_text,
+            PDF_WIDTH / 2,
+            PDF_HEIGHT - 2,
+            { align: 'center' }
+          );
+        }
+        
+        // Конвертируем PDF в Blob
+        const pdfBlob = pdfDoc.output('blob');
+        blobsArray.push(pdfBlob);
+      } catch (error) {
+        console.error(`Ошибка при создании PDF для штрих-кода заказа ${order.order_id}:`, error);
+      }
+    }
+    
+    // Проверяем, есть ли PDF для объединения
+    if (blobsArray.length === 0) {
+      return; // Тихо возвращаемся без уведомления
+    }
+    
+    // Объединяем все PDF в один файл
+    const { PDFDocument } = await import('pdf-lib');
+    
+    // Создаем новый PDF документ
+    const mergedPdf = await PDFDocument.create();
+    
+    // Для каждого Blob добавляем страницы в объединенный PDF
+    for (const blob of blobsArray) {
+      // Преобразуем Blob в ArrayBuffer
+      const arrayBuffer = await blob.arrayBuffer();
+      // Загружаем PDF из ArrayBuffer
+      const pdf = await PDFDocument.load(arrayBuffer);
+      // Копируем все страницы в объединенный PDF
+      const pageIndices = Array.from({ length: pdf.getPageCount() }, (_, i) => i);
+      const copiedPages = await mergedPdf.copyPages(pdf, pageIndices);
+      for (const page of copiedPages) {
+        mergedPdf.addPage(page);
+      }
+    }
+    
+    // Сохраняем объединенный PDF
+    const mergedPdfBytes = await mergedPdf.save();
+    const mergedPdfBlob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
+    
+    // Скачиваем объединенный PDF
+    const fileName = `Ozon_Supply_Barcodes_${timestamp}.pdf`;
+    downloadBlob(mergedPdfBlob, fileName);
+    
+    console.log(`PDF со штрих-кодами поставок Ozon сгенерирован: ${blobsArray.length} штрих-кодов`);
+  } catch (error) {
+    console.error('Ошибка при генерации PDF со штрих-кодами поставок Ozon:', error);
+    // Не показываем alert, т.к. это необязательная опция
+  }
+};
+
+/**
+ * Генерация PDF с изображениями штрих-кодов поставок Ozon
+ * Оптимизировано для правильного отображения штрих-кодов без искажений
+ */
+export const generateOzonBarcodeImagesPDF = async (orders: OzonOrder[]) => {
+  try {
+    // Отбираем только заказы с изображениями штрих-кодов поставок
+    const ordersWithImages = orders.filter(order => order.supply_barcode_image);
+    
+    if (ordersWithImages.length === 0) {
+      console.log('Нет заказов Ozon с изображениями штрих-кодов поставок');
+      return; // Тихо возвращаемся, без уведомления
+    }
+    
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `Ozon_Barcode_Images_${timestamp}.pdf`;
+    
+    // Создаем массив для хранения отдельных PDF
+    const pdfArray: Blob[] = [];
+    
+    // Обрабатываем каждый заказ отдельно
+    for (const order of ordersWithImages) {
+      if (!order.supply_barcode_image) continue;
+      
+      try {
+        // Полный URL для изображения штрих-кода
+        const imageUrl = `http://62.113.44.196:8080${order.supply_barcode_image}`;
+        
+        // Создаем документ со специальными размерами для штрих-кодов
+        // Стандартные штрих-коды обычно имеют соотношение сторон ~2.5:1 (ширина:высота)
+        const doc = new jsPDF({
+          orientation: 'landscape', // Штрих-коды всегда горизонтальные
+          unit: 'mm',
+          format: [110, 50], // Типичный размер для штрих-кода (~11x5 см)
+          compress: true
+        });
+        
+        // Добавляем изображение на всю страницу с небольшими полями
+        // Используем 90% ширины и высоты страницы
+        const pageWidth = 110;
+        const pageHeight = 50;
+        const margin = 5; // 5мм поля со всех сторон
+        
+        const imgWidth = pageWidth - (margin * 2);
+        const imgHeight = pageHeight - (margin * 2);
+        
+        // Центрируем изображение на странице
+        doc.addImage(
+          imageUrl, 
+          'PNG',
+          margin,
+          margin,
+          imgWidth,
+          imgHeight
+        );
+        
+        // Сохраняем PDF как Blob
+        const pdfBlob = doc.output('blob');
+        pdfArray.push(pdfBlob);
+        
+      } catch (error) {
+        console.error(`Ошибка при создании PDF для заказа ${order.order_id}:`, error);
+        // В случае ошибки пропускаем текущий заказ и продолжаем с следующим
+      }
+    }
+    
+    if (pdfArray.length === 0) {
+      alert('Не удалось создать PDF ни для одного штрих-кода Ozon');
+      return;
+    }
+    
+    // Объединяем все PDF в один файл
+    const { PDFDocument } = await import('pdf-lib');
+    
+    try {
+      // Создаем новый PDF документ
+      const mergedPdf = await PDFDocument.create();
+      
+      // Для каждого Blob добавляем страницы в объединенный PDF
+      for (const blob of pdfArray) {
+        // Преобразуем Blob в ArrayBuffer
+        const arrayBuffer = await blob.arrayBuffer();
+        // Загружаем PDF из ArrayBuffer
+        const pdf = await PDFDocument.load(arrayBuffer);
+        // Копируем все страницы в объединенный PDF
+        const pageIndices = Array.from({ length: pdf.getPageCount() }, (_, i) => i);
+        const copiedPages = await mergedPdf.copyPages(pdf, pageIndices);
+        for (const page of copiedPages) {
+          mergedPdf.addPage(page);
+        }
+      }
+      
+      // Сохраняем объединенный PDF
+      const mergedPdfBytes = await mergedPdf.save();
+      const mergedPdfBlob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
+      
+      // Скачиваем созданный PDF
+      downloadBlob(mergedPdfBlob, filename);
+      
+      console.log(`PDF с изображениями штрих-кодов поставок Ozon сгенерирован: ${pdfArray.length} страниц`);
+    } catch (error) {
+      console.error('Ошибка при объединении PDF с изображениями штрих-кодов:', error);
+      alert(`Ошибка при объединении PDF: ${error instanceof Error ? error.message : 'неизвестная ошибка'}`);
+    }
+  } catch (error) {
+    console.error('Ошибка при генерации PDF с изображениями штрих-кодов поставок Ozon:', error);
+    alert(`Не удалось создать PDF с изображениями: ${error instanceof Error ? error.message : 'неизвестная ошибка'}`);
   }
 };
 
@@ -994,19 +1238,12 @@ export const generateWbMergedStickersPDF = async (orders: WbOrder[]) => {
           hotfixes: ['px_scaling'] // Исправление для масштабирования пикселей
         });
         
-        // Создаем изображение из base64
-        const img = new Image();
-        img.src = getImageSrcFromBase64(order.supply_barcode);
-        
-        // Ждем загрузки изображения
-        await new Promise<void>((resolve, reject) => {
-          img.onload = () => resolve();
-          img.onerror = (error) => reject(error);
-        });
+        // Преобразуем base64 в данные для jsPDF
+        const imageData = getImageSrcFromBase64(order.supply_barcode);
         
         // Добавляем штрих-код на страницу
         pdfDoc.addImage(
-          img, 
+          imageData, 
           'PNG', 
           0, // x - начинаем с левого края
           0, // y - начинаем с верхнего края

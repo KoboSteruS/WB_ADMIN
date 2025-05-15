@@ -42,7 +42,9 @@ import {
   generateSupplyBarcodePDF,
   generateOzonReportsPDF,
   generateYandexReportsPDF,
-  generateWbMergedStickersPDF
+  generateWbMergedStickersPDF,
+  generateOzonSupplyStickersPDF,
+  generateOzonBarcodeImagesPDF
 } from '../services/pdfGenerationService';
 
 // Импортируем сервис генерации Excel
@@ -2739,6 +2741,50 @@ const Dashboard: React.FC = () => {
                   >
                     <i className="bi bi-file-earmark-spreadsheet me-1"></i> Сгенерировать отчеты
                   </Button>
+                  
+                  <Button 
+                    variant="outline-danger" 
+                    size="sm" 
+                    onClick={handleMergeOzonStickers}
+                    className="me-2"
+                    title="Объединить стикеры выбранных заказов в один PDF"
+                  >
+                    <i className="bi bi-file-earmark-pdf me-1"></i> Объединить стикеры
+                  </Button>
+                  
+                  <Button 
+                    variant="outline-dark" 
+                    size="sm" 
+                    onClick={() => {
+                      const ordersToUse = selectedOzonOrders.size > 0
+                        ? getSelectedOzonOrdersData()
+                        : getFilteredOzonOrders();
+                      
+                      // Вызываем функцию для генерации PDF со штрих-кодами поставок
+                      generateOzonSupplyStickersPDF(ordersToUse);
+                    }}
+                    className="me-2"
+                    title="Объединить штрих-коды поставок в один PDF"
+                  >
+                    <i className="bi bi-upc-scan me-1"></i> Объединить штрих-коды поставок
+                  </Button>
+                  
+                  <Button 
+                    variant="outline-secondary" 
+                    size="sm" 
+                    onClick={() => {
+                      const ordersToUse = selectedOzonOrders.size > 0
+                        ? getSelectedOzonOrdersData()
+                        : getFilteredOzonOrders();
+                      
+                      // Вызываем функцию для генерации PDF с изображениями штрих-кодов
+                      generateOzonBarcodeImagesPDF(ordersToUse);
+                    }}
+                    className="me-2"
+                    title="Создать PDF с изображениями штрих-кодов поставок"
+                  >
+                    <i className="bi bi-images me-1"></i> Изображения штрих-кодов
+                  </Button>
                 </div>
 
                 {/* Фильтрация по статусам Ozon */}
@@ -2859,6 +2905,13 @@ const Dashboard: React.FC = () => {
                             currentSortDirection={ozonSortDirection}
                             onSort={handleOzonSort}
                           />
+                          <SortableColumnHeader
+                            column="supply_barcode_text"
+                            title="Штрих-код поставки"
+                            currentSortColumn={ozonSortColumn}
+                            currentSortDirection={ozonSortDirection}
+                            onSort={handleOzonSort}
+                          />
                           <th>Стикер</th>
                         </tr>
                       </thead>
@@ -2891,6 +2944,23 @@ const Dashboard: React.FC = () => {
                             <td>{formatPrice(order.products?.[0]?.price || order.price || order.sale_price)}</td>
                             <td>{order.delivery_method?.warehouse || '—'}</td>
                             <td>{order.delivery_method?.name || '—'}</td>
+                            <td>
+                              {order.supply_barcode_text ? (
+                                <div>
+                                  <span className="d-block mb-1" style={{ fontSize: '0.85em' }}>{order.supply_barcode_text}</span>
+                                  {order.supply_barcode_image && (
+                                    <Button 
+                                      variant="outline-secondary" 
+                                      size="sm"
+                                      onClick={() => window.open(`http://62.113.44.196:8080${order.supply_barcode_image}`, '_blank')}
+                                      title="Посмотреть штрих-код поставки"
+                                    >
+                                      <i className="bi bi-file-earmark-text"></i>
+                                    </Button>
+                                  )}
+                                </div>
+                              ) : '—'}
+                            </td>
                             <td>
                               {order.sticker_pdf ? (
                                 <Button 
