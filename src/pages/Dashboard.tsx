@@ -39,11 +39,18 @@ import {
   generateArticlesSummaryPDF, 
   generateOrdersListPDF, 
   generateStickersPDF,
-  generateSupplyBarcodePDF
+  generateSupplyBarcodePDF,
+  generateOzonReportsPDF,
+  generateYandexReportsPDF,
+  generateWbMergedStickersPDF
 } from '../services/pdfGenerationService';
 
 // Импортируем сервис генерации Excel
-import { generateArticlesSummaryExcel } from '../services/excelGenerationService';
+import { 
+  generateArticlesSummaryExcel,
+  generateOzonArticlesSummaryExcel,
+  generateYandexArticlesSummaryExcel
+} from '../services/excelGenerationService';
 
 /**
  * Интерфейс для юридического лица
@@ -647,6 +654,80 @@ const Dashboard: React.FC = () => {
       alert('Отчеты успешно сгенерированы и сохранены');
     } catch (error) {
       console.error('Ошибка при генерации отчетов:', error);
+      alert(`Произошла ошибка при генерации отчетов: ${error instanceof Error ? (error as Error).message : String(error)}`);
+    }
+  };
+  
+  /**
+   * Скачивание отчетов о заказах Ozon (сводка в Excel, список и стикеры в PDF)
+   */
+  const downloadOzonOrderReports = () => {
+    const selectedOrdersData = getSelectedOzonOrdersData();
+    
+    if (selectedOrdersData.length === 0) {
+      alert('Выберите хотя бы один заказ Ozon');
+      return;
+    }
+    
+    // Сортируем выбранные заказы по SKU для единообразия
+    const sortedBySku = [...selectedOrdersData].sort((a, b) => {
+      const skuA = (a.products?.[0]?.sku || a.sku || a.offer_id || '').toString().toLowerCase();
+      const skuB = (b.products?.[0]?.sku || b.sku || b.offer_id || '').toString().toLowerCase();
+      return skuA.localeCompare(skuB);
+    });
+    
+    console.log('Генерация отчетов для заказов Ozon:', sortedBySku);
+    
+    try {
+      // Шаг 1: Генерируем сводку по артикулам в Excel
+      console.log('Генерация Excel: Сводка по артикулам Ozon');
+      generateOzonArticlesSummaryExcel(sortedBySku, selectedLegalEntity || undefined);
+      
+      // Шаг 2: Генерируем все PDF отчеты
+      console.log('Генерация PDF отчетов для Ozon');
+      generateOzonReportsPDF(sortedBySku, selectedLegalEntity || undefined);
+      
+      console.log('Все отчеты Ozon успешно сгенерированы');
+      alert('Отчеты Ozon успешно сгенерированы и сохранены');
+    } catch (error) {
+      console.error('Ошибка при генерации отчетов Ozon:', error);
+      alert(`Произошла ошибка при генерации отчетов: ${error instanceof Error ? (error as Error).message : String(error)}`);
+    }
+  };
+  
+  /**
+   * Скачивание отчетов о заказах Яндекс Маркет (сводка в Excel, список и стикеры в PDF)
+   */
+  const downloadYandexOrderReports = () => {
+    const selectedOrdersData = getSelectedYandexOrdersData();
+    
+    if (selectedOrdersData.length === 0) {
+      alert('Выберите хотя бы один заказ Яндекс Маркет');
+      return;
+    }
+    
+    // Сортируем выбранные заказы по SKU для единообразия
+    const sortedBySku = [...selectedOrdersData].sort((a, b) => {
+      const skuA = (a.items?.[0]?.shopSku || a.shop_sku || a.offer_id || '').toString().toLowerCase();
+      const skuB = (b.items?.[0]?.shopSku || b.shop_sku || b.offer_id || '').toString().toLowerCase();
+      return skuA.localeCompare(skuB);
+    });
+    
+    console.log('Генерация отчетов для заказов Яндекс Маркет:', sortedBySku);
+    
+    try {
+      // Шаг 1: Генерируем сводку по артикулам в Excel
+      console.log('Генерация Excel: Сводка по артикулам Яндекс Маркет');
+      generateYandexArticlesSummaryExcel(sortedBySku, selectedLegalEntity || undefined);
+      
+      // Шаг 2: Генерируем все PDF отчеты
+      console.log('Генерация PDF отчетов для Яндекс Маркет');
+      generateYandexReportsPDF(sortedBySku, selectedLegalEntity || undefined);
+      
+      console.log('Все отчеты Яндекс Маркет успешно сгенерированы');
+      alert('Отчеты Яндекс Маркет успешно сгенерированы и сохранены');
+    } catch (error) {
+      console.error('Ошибка при генерации отчетов Яндекс Маркет:', error);
       alert(`Произошла ошибка при генерации отчетов: ${error instanceof Error ? (error as Error).message : String(error)}`);
     }
   };
@@ -2168,6 +2249,48 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  /**
+   * Объединяет выбранные стикеры Wildberries в один PDF-файл
+   */
+  const handleMergeWbStickers = async () => {
+    // Используем выбранные заказы или все отфильтрованные, если ничего не выбрано
+    const ordersToUse = selectedWbOrders.size > 0
+      ? getSelectedWbOrdersData()
+      : getFilteredWbOrders();
+    
+    // Проверяем, есть ли заказы со штрих-кодами поставок
+    const ordersWithStickers = ordersToUse.filter(order => order.supply_barcode);
+    
+    if (ordersWithStickers.length === 0) {
+      alert('Нет заказов Wildberries со штрих-кодами поставок для объединения');
+      return;
+    }
+    
+    try {
+      // Показываем индикатор загрузки
+      setStatusChangeLoading(true);
+      setStatusChangeMessage(`Объединение ${ordersWithStickers.length} штрих-кодов поставок Wildberries...`);
+      
+      // Вызываем функцию генерации PDF с объединенными стикерами
+      await generateWbMergedStickersPDF(ordersWithStickers);
+      
+      // Убираем индикатор загрузки
+      setStatusChangeLoading(false);
+      setStatusChangeMessage('');
+    } catch (error) {
+      console.error('Ошибка при объединении стикеров Wildberries:', error);
+      setStatusChangeLoading(false);
+      setStatusChangeMessage('');
+      
+      // Показываем понятное сообщение об ошибке
+      let errorMessage = 'Не удалось объединить стикеры Wildberries';
+      if (error instanceof Error) {
+        errorMessage += `: ${error.message}`;
+      }
+      alert(errorMessage);
+    }
+  };
+
   return (
     <Container fluid className="dashboard-container">
 
@@ -2325,14 +2448,6 @@ const Dashboard: React.FC = () => {
                     )}
                   </Button>
                   
-                  <Button 
-                    variant="outline-primary" 
-                    size="sm" 
-                    onClick={() => { if (selectedLegalEntity) loadWildberriesOrders(selectedLegalEntity); }}
-                    className="me-2"
-                  >
-                    <i className="bi bi-arrow-repeat me-1"></i> Обновить
-                  </Button>
 
                   <Button 
                     variant="outline-success" 
@@ -2353,13 +2468,14 @@ const Dashboard: React.FC = () => {
                   </Button>
 
                   <Button 
-                    variant={wbStatusConfirm ? "outline-info" : "outline-warning"} 
+                    variant="outline-secondary" 
                     size="sm" 
-                    onClick={handleToggleWbOrders}
+                    onClick={handleMergeWbStickers}
+                    className="me-2"
                   >
-                    <i className="bi bi-eye me-1"></i> 
-                    {wbStatusConfirm ? "Показать все заказы" : "Показать заказы с подтверждением"}
+                    <i className="bi bi-collection me-1"></i> Объединить штрих-коды поставок
                   </Button>
+
                 </div>
                 
                 {/* Кнопки фильтрации по статусам Wildberries */}
@@ -2572,27 +2688,7 @@ const Dashboard: React.FC = () => {
                   </Alert>
                 )}
                 
-                <div className="mb-3">
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={handleChangeOzonOrderStatus}
-                    disabled={selectedOzonOrders.size === 0 || statusChangeLoading}
-                    className="me-2"
-                  >
-                    {statusChangeLoading ? (
-                      <>
-                        <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
-                        Обработка...
-                      </>
-                    ) : (
-                      <>
-                        <i className="bi bi-arrow-right-circle me-2"></i>
-                        {getOzonStatusButtonText(getSelectedOzonOrdersStatus())} ({selectedOzonOrders.size})
-                      </>
-                    )}
-                  </Button>
-                  
+                <div className="mb-3">    
                   <Button
                     variant="success"
                     size="sm"
@@ -2613,14 +2709,6 @@ const Dashboard: React.FC = () => {
                     )}
                   </Button>
                   
-                  <Button 
-                    variant="outline-primary" 
-                    size="sm" 
-                    onClick={() => { if (selectedLegalEntity) loadOzonOrders(selectedLegalEntity); }}
-                    className="me-2"
-                  >
-                    <i className="bi bi-arrow-repeat me-1"></i> Обновить
-                  </Button>
 
                   <Button 
                     variant="outline-success" 
@@ -2640,14 +2728,16 @@ const Dashboard: React.FC = () => {
                     <i className="bi bi-check-all me-1"></i> Выделить все заказы
                   </Button>
 
+                  
                   <Button 
-                    variant="outline-success" 
+                    variant="outline-primary" 
                     size="sm" 
-                    onClick={handleMergeOzonStickers}
+                    onClick={downloadOzonOrderReports}
                     className="me-2"
-                    title="Объединить стикеры выбранных заказов в один PDF"
+                    title="Сгенерировать отчеты по выбранным заказам"
+                    disabled={selectedOzonOrders.size === 0}
                   >
-                    <i className="bi bi-file-earmark-pdf me-1"></i> Объединить стикеры
+                    <i className="bi bi-file-earmark-spreadsheet me-1"></i> Сгенерировать отчеты
                   </Button>
                 </div>
 
@@ -2886,14 +2976,6 @@ const Dashboard: React.FC = () => {
                     )}
                   </Button>
                   
-                  <Button 
-                    variant="outline-primary" 
-                    size="sm" 
-                    onClick={() => { if (selectedLegalEntity) loadYandexMarketOrders(selectedLegalEntity); }}
-                    className="me-2"
-                  >
-                    <i className="bi bi-arrow-repeat me-1"></i> Обновить
-                  </Button>
 
                   <Button 
                     variant="outline-success" 
@@ -2913,14 +2995,16 @@ const Dashboard: React.FC = () => {
                     <i className="bi bi-check-all me-1"></i> Выделить все заказы
                   </Button>
 
+                  
                   <Button 
-                    variant="outline-success" 
+                    variant="outline-primary" 
                     size="sm" 
-                    onClick={handleMergeYandexStickers}
+                    onClick={downloadYandexOrderReports}
                     className="me-2"
-                    title="Объединить стикеры выбранных заказов в один PDF"
+                    title="Сгенерировать отчеты по выбранным заказам"
+                    disabled={selectedYmOrders.size === 0}
                   >
-                    <i className="bi bi-file-earmark-pdf me-1"></i> Объединить стикеры
+                    <i className="bi bi-file-earmark-spreadsheet me-1"></i> Сгенерировать отчеты
                   </Button>
                 </div>
 

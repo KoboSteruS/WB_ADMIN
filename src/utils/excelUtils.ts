@@ -4,6 +4,8 @@
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import { WbOrder } from '../types/wildberries';
+import { OzonOrder } from '../types/ozon';
+import { YandexMarketOrder } from '../types/yandexmarket';
 
 /**
  * Создает и сохраняет Excel файл
@@ -176,6 +178,116 @@ export const groupOrdersForExcelSummary = (orders: WbOrder[]): any[][] => {
     // Возвращаем строку для Excel - артикул, название и количество
     return [
       articleKey, // Артикул (nm_id)
+      productName, // Название товара
+      count // Количество
+    ];
+  });
+};
+
+/**
+ * Группирует заказы Ozon по артикулу для создания сводки
+ * @param orders Массив заказов Ozon
+ * @returns Массив сгруппированных данных для Excel
+ */
+export const groupOzonOrdersForExcelSummary = (orders: OzonOrder[]): any[][] => {
+  // Группируем заказы по артикулу (offer_id или sku)
+  const articleGroups: { [key: string]: OzonOrder[] } = {};
+  
+  orders.forEach(order => {
+    // Определяем идентификатор товара
+    // Приоритет: 1) sku из products, 2) sku, 3) offer_id
+    let articleKey = 'unknown';
+    if (order.products && order.products.length > 0 && order.products[0].sku) {
+      articleKey = String(order.products[0].sku);
+    } else if (order.sku) {
+      articleKey = String(order.sku);
+    } else if (order.offer_id) {
+      articleKey = String(order.offer_id);
+    }
+    
+    if (!articleGroups[articleKey]) {
+      articleGroups[articleKey] = [];
+    }
+    articleGroups[articleKey].push(order);
+  });
+  
+  // Преобразуем группы в формат для Excel
+  return Object.entries(articleGroups).map(([articleKey, orderList]) => {
+    // Подсчитываем количество заказов этого товара
+    const count = orderList.length;
+    
+    // Получаем название товара из первого заказа
+    let productName = '';
+    if (orderList.length > 0) {
+      const firstOrder = orderList[0];
+      // Приоритет: 1) name в products, 2) product_name, 3) name
+      if (firstOrder.products && firstOrder.products.length > 0 && firstOrder.products[0].name) {
+        productName = firstOrder.products[0].name;
+      } else if (firstOrder.product_name) {
+        productName = firstOrder.product_name;
+      } else if (firstOrder.name) {
+        productName = firstOrder.name;
+      }
+    }
+    
+    // Возвращаем строку для Excel - артикул, название и количество
+    return [
+      articleKey, // Артикул (sku или offer_id)
+      productName, // Название товара
+      count // Количество
+    ];
+  });
+};
+
+/**
+ * Группирует заказы Яндекс Маркет по артикулу для создания сводки
+ * @param orders Массив заказов Яндекс Маркет
+ * @returns Массив сгруппированных данных для Excel
+ */
+export const groupYandexOrdersForExcelSummary = (orders: YandexMarketOrder[]): any[][] => {
+  // Группируем заказы по артикулу (shop_sku или offer_id)
+  const articleGroups: { [key: string]: YandexMarketOrder[] } = {};
+  
+  orders.forEach(order => {
+    // Определяем идентификатор товара
+    // Приоритет: 1) shopSku из items, 2) shop_sku, 3) offer_id
+    let articleKey = 'unknown';
+    if (order.items && order.items.length > 0 && order.items[0].shopSku) {
+      articleKey = String(order.items[0].shopSku);
+    } else if (order.shop_sku) {
+      articleKey = String(order.shop_sku);
+    } else if (order.offer_id) {
+      articleKey = String(order.offer_id);
+    }
+    
+    if (!articleGroups[articleKey]) {
+      articleGroups[articleKey] = [];
+    }
+    articleGroups[articleKey].push(order);
+  });
+  
+  // Преобразуем группы в формат для Excel
+  return Object.entries(articleGroups).map(([articleKey, orderList]) => {
+    // Подсчитываем количество заказов этого товара
+    const count = orderList.length;
+    
+    // Получаем название товара из первого заказа
+    let productName = '';
+    if (orderList.length > 0) {
+      const firstOrder = orderList[0];
+      // Приоритет: 1) offerName в items, 2) name, 3) product_name
+      if (firstOrder.items && firstOrder.items.length > 0 && firstOrder.items[0].offerName) {
+        productName = firstOrder.items[0].offerName;
+      } else if (firstOrder.name) {
+        productName = firstOrder.name;
+      } else if (firstOrder.product_name) {
+        productName = firstOrder.product_name;
+      }
+    }
+    
+    // Возвращаем строку для Excel - артикул, название и количество
+    return [
+      articleKey, // Артикул (shop_sku или offer_id)
       productName, // Название товара
       count // Количество
     ];
