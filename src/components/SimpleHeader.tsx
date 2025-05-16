@@ -4,15 +4,13 @@ import ThemeSwitcher from './common/ThemeSwitcher';
 import './Header.css';
 import { authService } from '../services/auth/auth-service';
 
-interface SimpleHeaderProps {
-  toggleSidebar: () => void;
-}
+interface SimpleHeaderProps {}
 
 /**
  * Упрощенная версия хедера без использования библиотеки react-bootstrap
  * Используется как временная замена до установки npm-пакетов
  */
-const SimpleHeader: React.FC<SimpleHeaderProps> = ({ toggleSidebar }) => {
+const SimpleHeader: React.FC<SimpleHeaderProps> = () => {
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -49,12 +47,6 @@ const SimpleHeader: React.FC<SimpleHeaderProps> = ({ toggleSidebar }) => {
       <div className="container-fluid px-3">
         <div className="d-flex justify-content-between align-items-center">
           <div className="d-flex align-items-center">
-            <button 
-              className="btn btn-light sidebar-toggle me-2" 
-              onClick={toggleSidebar}
-            >
-              <i className="bi bi-list"></i>
-            </button>
             <Link to="/" className="d-flex align-items-center" style={{ textDecoration: 'none', color: 'inherit' }}>
               <div className="logo-container me-2">
                 <img src="/logo192.png" alt="Логотип" width="30" height="30" />

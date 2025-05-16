@@ -1184,16 +1184,46 @@ const Dashboard: React.FC = () => {
     return [...uniqueOrders].sort((a: YandexMarketOrder, b: YandexMarketOrder): number => {
       // Проверка на сортировку по дате
       if (ymSortColumn === 'created_at' || ymSortColumn === 'created_date') {
-        const dateA = a[ymSortColumn as keyof YandexMarketOrder] 
-          ? new Date(String(a[ymSortColumn as keyof YandexMarketOrder])).getTime() 
-          : 0;
-        const dateB = b[ymSortColumn as keyof YandexMarketOrder] 
-          ? new Date(String(b[ymSortColumn as keyof YandexMarketOrder])).getTime() 
-          : 0;
+        // Функция для более надежного получения даты с учетом разных форматов
+        const getDateValue = (order: YandexMarketOrder): number => {
+          let dateStr = '';
+          
+          // Проверяем поля created_at и created_date
+          if (ymSortColumn === 'created_at' && order.created_at) {
+            dateStr = String(order.created_at);
+          } else if (order.created_date) {
+            dateStr = String(order.created_date);
+          } else if (order.creationDate) {
+            dateStr = String(order.creationDate);
+          }
+          
+          if (!dateStr) return 0;
+          
+          // Преобразуем дату из разных форматов
+          try {
+            // Проверка на формат DD-MM-YYYY HH:MM:SS
+            if (dateStr.match(/^\d{2}-\d{2}-\d{4} \d{2}:\d{2}:\d{2}$/)) {
+              const [datePart, timePart] = dateStr.split(' ');
+              const [day, month, year] = datePart.split('-').map(Number);
+              const [hours, minutes, seconds] = timePart.split(':').map(Number);
+              return new Date(year, month - 1, day, hours, minutes, seconds).getTime();
+            }
+            
+            // Стандартное преобразование для ISO формата
+            return new Date(dateStr).getTime();
+          } catch (error) {
+            console.error('Ошибка при преобразовании даты:', dateStr, error);
+            return 0;
+          }
+        };
+        
+        const dateA = getDateValue(a);
+        const dateB = getDateValue(b);
         
         return ymSortDirection === 'asc' ? dateA - dateB : dateB - dateA;
       }
       
+      // Остальной код сортировки остается без изменений
       // Обработка числовых полей
       if (ymSortColumn === 'price' || ymSortColumn === 'total_price') {
         const getPriceValue = (order: YandexMarketOrder): number => {
@@ -2638,13 +2668,6 @@ const Dashboard: React.FC = () => {
                             onSort={handleWbSort}
                           />
                           <SortableColumnHeader
-                            column="own_status"
-                            title="Внутренний статус"
-                            currentSortColumn={wbSortColumn}
-                            currentSortDirection={wbSortDirection}
-                            onSort={handleWbSort}
-                          />
-                          <SortableColumnHeader
                             column="supply_id"
                             title="Номер поставки"
                             currentSortColumn={wbSortColumn}
@@ -2681,11 +2704,6 @@ const Dashboard: React.FC = () => {
                             <td>
                               <Badge bg={getBadgeColor(order.wb_status)}>
                                 {getStatusText(order.wb_status)}
-                              </Badge>
-                            </td>
-                            <td>
-                              <Badge bg={getBadgeColor(order.own_status)}>
-                                {getStatusText(order.own_status)}
                               </Badge>
                             </td>
                             <td>
@@ -2960,13 +2978,6 @@ const Dashboard: React.FC = () => {
                             onSort={handleOzonSort}
                           />
                           <SortableColumnHeader
-                            column="own_status"
-                            title="Внутренний статус"
-                            currentSortColumn={ozonSortColumn}
-                            currentSortDirection={ozonSortDirection}
-                            onSort={handleOzonSort}
-                          />
-                          <SortableColumnHeader
                             column="products.price"
                             title="Цена продажи"
                             currentSortColumn={ozonSortColumn}
@@ -2997,40 +3008,37 @@ const Dashboard: React.FC = () => {
                           <th>Стикер</th>
                         </tr>
                       </thead>
-                                              <tbody>
-                          {getCurrentPageOzonOrders().map((order, index) => (
+                      <tbody>
+                        {getCurrentPageOzonOrders().map((order, index) => (
                             <tr key={getRowKey(order, 'ozon', index)}>
-                                  <td>
-                                    <Form.Check
-                                      type="checkbox"
+                            <td>
+                              <Form.Check
+                                type="checkbox"
                                       checked={selectedOzonOrders.has(order.id || order.order_id || '')}
                                       onChange={() => handleSelectOzonOrder(order.id || order.order_id || '')}
                                       aria-label={`Выбрать заказ ${order.id || order.order_id || ''}`}
-                                    />
-                                  </td>
+                              />
+                            </td>
                                   <td>{order.posting_number || '—'}</td>
-                                  <td>{order.order_id || '—'}</td>
-                                  <td>{formatDate(order.in_process_at || order.created_at || order.created_date)}</td>
+                            <td>{order.order_id || '—'}</td>
+                            <td>{formatDate(order.in_process_at || order.created_at || order.created_date)}</td>
                                   <td>{order.products?.[0]?.name || order.product_name || order.name || '—'}</td>
                                   <td>{order.products?.[0]?.sku || order.sku || order.offer_id || '—'}</td>
                                   <td>{order.products?.[0]?.quantity || '—'}</td>
-                                  <td>
-                                    <Badge bg={getBadgeColor(order.status)}>
-                                      {getStatusText(order.status)}
-                                    </Badge>
-                                  </td>
-                                  <td>
-                                    <Badge bg={getBadgeColor(order.own_status)}>
-                                      {getStatusText(order.own_status)}
-                                    </Badge>
-                                  </td>
+                            <td>
+                              <Badge bg={getBadgeColor(order.status)}>
+                                {getStatusText(order.status)}
+                              </Badge>
+                            </td>
                                   <td>{formatPrice(order.products?.[0]?.price || order.price || order.sale_price)}</td>
                                   <td>{order.delivery_method?.warehouse || '—'}</td>
                                   <td>{order.delivery_method?.name || '—'}</td>
                                   <td>
                                     {order.supply_barcode_text ? (
                                       <div>
-                                        <span className="d-block mb-1" style={{ fontSize: '0.85em' }}>{order.supply_barcode_text}</span>
+                                        <span className="d-block mb-1" style={{ fontSize: '0.85em' }}>
+                                          {order.supply_barcode_text.replace("%960%", "")}
+                                        </span>
                                         {order.supply_barcode_image && (
                                           <Button 
                                             variant="outline-secondary" 
@@ -3056,8 +3064,8 @@ const Dashboard: React.FC = () => {
                                       </Button>
                                     ) : '—'}
                                   </td>
-                                </tr>
-                                                        ))}
+                          </tr>
+                        ))}
                       </tbody>
                     </Table>
                     {ozonOrders.length > 0 && (

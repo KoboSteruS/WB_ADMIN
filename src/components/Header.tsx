@@ -6,11 +6,9 @@ import ThemeSwitcher from './common/ThemeSwitcher';
 import { authService } from '../services/auth/auth-service';
 import { useThemeContext } from '../contexts/ThemeContext';
 
-interface HeaderProps {
-  toggleSidebar: () => void;
-}
+interface HeaderProps {}
 
-const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
+const Header: React.FC<HeaderProps> = () => {
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const navigate = useNavigate();
   const { theme } = useThemeContext();
@@ -89,12 +87,6 @@ const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
     <Navbar fixed="top" className="header-navbar">
       <Container fluid className="px-3">
         <div className="d-flex align-items-center">
-          <Button 
-            className="sidebar-toggle me-2" 
-            onClick={toggleSidebar}
-          >
-            <i className="bi bi-list"></i>
-          </Button>
           <Navbar.Brand as={Link} to="/" className="d-flex align-items-center">
             <div className="logo-container me-2">
               <img src="/logo192.png" alt="Логотип" width="30" height="30" />

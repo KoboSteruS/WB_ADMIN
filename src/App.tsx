@@ -24,7 +24,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { authService } from './services/auth/auth-service';
 
 function App() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Сайдбар всегда закрыт (collapsed)
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
@@ -34,12 +34,6 @@ function App() {
     const hasAuthToken = !!localStorage.getItem('auth_token');
     setIsAuthenticated(isAuthAPI || isAuthLocal || hasAuthToken);
   }, []);
-
-  const toggleSidebar = () => {
-    setSidebarOpen(!sidebarOpen);
-    
-    // Удаляем обновление таблиц при изменении сайдбара
-  };
 
   // Компонент для защищенных маршрутов
   const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -67,10 +61,10 @@ function App() {
           <Route path="*" element={
             <ProtectedRoute>
               <div className="app-container">
-                <Header toggleSidebar={toggleSidebar} />
+                <Header />
                 <div className="content-container">
-                  <Sidebar isOpen={sidebarOpen} />
-                  <main className={`main-content ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
+                  <Sidebar />
+                  <main className="main-content sidebar-closed">
                     <Routes>
                       <Route path="/" element={<Dashboard />} />
                       <Route path="/marketplace-settings" element={<MarketplaceSettings />} />

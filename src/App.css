@@ -1,7 +1,7 @@
 :root {
   --header-height: 60px;
   --sidebar-width: 250px;
-  --sidebar-collapsed-width: 70px;
+  --sidebar-collapsed-width: 50px;
   --primary-color: #3498db;
   --secondary-color: #2c3e50;
   --bg-light: #f8f9fa;
@@ -69,13 +69,15 @@ body {
 .main-content {
   flex: 1;
   padding: 20px;
-  transition: margin-left 0.3s ease, width 0.3s ease;
+  transition: none;
   will-change: margin-left, width;
   overflow-x: hidden;
+  margin-left: var(--sidebar-collapsed-width);
 }
 
+/* Больше не нужно, так как сайдбар всегда в одном состоянии */
 .main-content.sidebar-open {
-  margin-left: var(--sidebar-width);
+  margin-left: var(--sidebar-collapsed-width);
 }
 
 .main-content.sidebar-closed {

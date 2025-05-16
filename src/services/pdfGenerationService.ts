@@ -375,340 +375,6 @@ export const generateStickersPDF = (orders: WbOrder[]) => {
 };
 
 /**
- * Генерация PDF со штрих-кодом поставки
- * @param supplyBarcode Base64-строка штрих-кода поставки
- * @param supplyId ID поставки для отображения
- */
-export const generateSupplyBarcodePDF = async (supplyBarcode: string, supplyId: string): Promise<void> => {
-  try {
-    if (!supplyBarcode || !isBase64Image(supplyBarcode)) {
-      alert('Штрих-код поставки отсутствует или некорректен');
-      return;
-    }
-    
-    // Точные размеры стикера
-    const PDF_WIDTH = 58; // ширина стикера в мм
-    const PDF_HEIGHT = 40; // высота стикера в мм
-    
-    // Текущий временной штамп для имени файла
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    
-    // Создаем PDF документ с заданным размером
-    const pdfDoc = new jsPDF({
-      orientation: 'landscape',
-      unit: 'mm',
-      format: [PDF_WIDTH, PDF_HEIGHT], // Точный размер стикера
-      hotfixes: ['px_scaling'] // Исправление для масштабирования пикселей
-    });
-    
-    try {
-      // Создаем изображение из base64
-      const img = new Image();
-      img.src = getImageSrcFromBase64(supplyBarcode);
-      
-      // Ждем загрузки изображения
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = (error) => reject(error);
-      });
-      
-      // Растягиваем изображение на всю страницу без сохранения пропорций
-      pdfDoc.addImage(
-        img, 
-        'PNG', 
-        0, // x - начинаем с левого края
-        0, // y - начинаем с верхнего края
-        PDF_WIDTH, // используем всю ширину
-        PDF_HEIGHT // используем всю высоту
-      );
-      
-      // Сохраняем PDF
-      const filename = `WB_Supply_${supplyId}_${timestamp}.pdf`;
-      pdfDoc.save(filename);
-      console.log(`PDF со штрих-кодом поставки успешно создан: ${filename}`);
-    } catch (error) {
-      console.error('Ошибка при добавлении штрих-кода в PDF:', error);
-      alert(`Ошибка при создании PDF со штрих-кодом: ${error instanceof Error ? (error as Error).message : String(error)}`);
-    }
-  } catch (error) {
-    console.error('Ошибка при создании PDF со штрих-кодом поставки:', error);
-    alert(`Произошла ошибка при создании PDF: ${error instanceof Error ? (error as Error).message : String(error)}`);
-  }
-};
-
-/**
- * Генерирует набор отчетов по заказам Ozon
- * @param orders Список заказов Ozon
- * @param legalEntity Информация о юридическом лице
- */
-export const generateOzonReportsPDF = async (
-  orders: OzonOrder[], 
-  legalEntity?: LegalEntity
-): Promise<void> => {
-  try {
-    // Создаем PDF документы
-    await generateOzonArticlesSummaryPDF(orders, legalEntity);
-    await generateOzonOrdersListPDF(orders, legalEntity);
-    await generateOzonStickersPDF(orders);
-    
-    // Добавляем генерацию PDF со штрих-кодами поставок, если они есть
-    await generateOzonSupplyStickersPDF(orders);
-    
-    // Добавляем генерацию PDF с изображениями штрих-кодов, если они есть
-    await generateOzonBarcodeImagesPDF(orders);
-    
-    console.log('Все PDF-файлы для Ozon успешно сгенерированы');
-    alert('PDF-файлы для Ozon успешно сгенерированы и сохранены');
-  } catch (error) {
-    console.error('Ошибка при генерации PDF для Ozon:', error);
-    alert(`Произошла ошибка при генерации PDF: ${error instanceof Error ? (error as Error).message : String(error)}`);
-  }
-};
-
-/**
- * Генерация PDF: Сводка по артикулам Ozon
- */
-export const generateOzonArticlesSummaryPDF = async (
-  orders: OzonOrder[],
-  legalEntity?: LegalEntity
-): Promise<void> => {
-  // Проверяем, есть ли заказы
-    if (orders.length === 0) {
-    console.log('Нет заказов Ozon для создания сводки');
-    return;
-  }
-  
-  try {
-    // Создаем PDF документ
-    const doc = await createPDFWithCyrillicSupport();
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    
-    // Добавляем заголовок с явным указанием шрифта
-    doc.setFont('Roboto');
-    doc.setFontSize(16);
-    const title = 'Сводка по заказам Ozon';
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const textWidth = doc.getStringUnitWidth(title) * 16 / doc.internal.scaleFactor;
-    const x = (pageWidth - textWidth) / 2;
-    doc.text(title, x, 15);
-    
-    // Группируем заказы по SKU
-    const articleGroups: { [key: string]: OzonOrder[] } = {};
-    
-    orders.forEach(order => {
-      let sku = 'unknown';
-      if (order.products && order.products.length > 0 && order.products[0].sku) {
-        sku = String(order.products[0].sku);
-      } else if (order.sku) {
-        sku = String(order.sku);
-      } else if (order.offer_id) {
-        sku = String(order.offer_id);
-      }
-      
-      if (!articleGroups[sku]) {
-        articleGroups[sku] = [];
-      }
-      articleGroups[sku].push(order);
-    });
-    
-    // Формируем данные для таблицы
-    const tableData = Object.entries(articleGroups).map(([sku, orderList]) => {
-      const count = orderList.length;
-      
-      let productName = '';
-      if (orderList.length > 0) {
-        const firstOrder = orderList[0];
-        if (firstOrder.products && firstOrder.products.length > 0 && firstOrder.products[0].name) {
-          productName = firstOrder.products[0].name;
-        } else if (firstOrder.product_name) {
-          productName = firstOrder.product_name;
-        } else if (firstOrder.name) {
-          productName = firstOrder.name;
-        }
-      }
-      
-      return [sku, productName, count.toString()];
-    });
-    
-    // Заголовки таблицы
-    const headers = ['Артикул', 'Название', 'Количество'];
-    
-    // Добавляем таблицу
-    addTableToPDF(doc, tableData, headers, 40, {
-      fontSize: 10,
-      styles: {
-        overflow: 'linebreak',
-        cellPadding: 2,
-        lineColor: [80, 80, 80],
-        lineWidth: 0.1,
-        font: 'Roboto',
-        fontStyle: 'normal'
-      },
-      headStyles: {
-        halign: 'center',
-        valign: 'middle',
-        fillColor: [0, 113, 188],
-        textColor: [255, 255, 255],
-        fontSize: 10,
-        font: 'Roboto',
-        fontStyle: 'normal'
-      },
-      columnStyles: {
-        0: { halign: 'left', font: 'Roboto', fontStyle: 'normal' },
-        1: { halign: 'left', font: 'Roboto', fontStyle: 'normal' },
-        2: { halign: 'center', font: 'Roboto', fontStyle: 'normal' }
-      },
-      columnWidths: [20, 60, 20]
-    });
-    
-    // Сохраняем PDF
-    const filename = `Ozon_Orders_Summary_${timestamp}.pdf`;
-      doc.save(filename);
-    console.log('PDF со сводкой по заказам Ozon сгенерирован');
-  } catch (error) {
-    console.error('Ошибка при генерации PDF для Ozon:', error);
-    alert('Произошла ошибка при создании PDF. Подробности в консоли.');
-  }
-};
-
-/**
- * Генерация PDF: Список заказов Ozon
- */
-export const generateOzonOrdersListPDF = async (
-  orders: OzonOrder[],
-  legalEntity?: LegalEntity
-): Promise<void> => {
-  if (orders.length === 0) {
-    console.log('Нет заказов Ozon для создания списка');
-      return;
-    }
-    
-  try {
-    // Создаем PDF документ в альбомной ориентации
-    const doc = await createPDFWithCyrillicSupport({ orientation: 'landscape' });
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    
-    // Добавляем заголовок
-    doc.setFont('Roboto');
-    doc.setFontSize(16);
-    const title = 'Список заказов Ozon';
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const textWidth = doc.getStringUnitWidth(title) * 16 / doc.internal.scaleFactor;
-    const x = (pageWidth - textWidth) / 2;
-    doc.text(title, x, 15);
-    
-    // Формируем данные для таблицы
-    const tableData = orders.map(order => {
-      let productName = '';
-      let sku = '';
-      
-      if (order.products && order.products.length > 0) {
-        productName = order.products[0].name || '';
-        sku = String(order.products[0].sku || '');
-      } else {
-        productName = order.product_name || order.name || '';
-        sku = String(order.sku || order.offer_id || '');
-      }
-      
-      // Добавляем информацию о штрих-коде поставки, если она есть
-      const supplyBarcodeText = order.supply_barcode_text || '-';
-      
-      return [
-        order.posting_number || order.order_id || '',
-        sku,
-        productName,
-        order.status || '',
-        formatPrice(order.price || order.products?.[0]?.price || 0),
-        formatDate(order.in_process_at || order.created_at || order.created_date || ''),
-        order.delivery_method?.warehouse || order.city || '',
-        order.delivery_method?.name || order.delivery_type || '',
-        supplyBarcodeText,
-        order.customer?.name || order.customer_name || ''
-      ].map(String);
-    });
-    
-    // Заголовки таблицы
-    const headers = [
-      'Номер', 'Артикул', 'Товар', 'Статус', 'Цена', 
-      'Дата', 'Склад', 'Доставка', 'Штрих-код поставки', 'Клиент'
-    ];
-    
-    // Добавляем таблицу
-    addTableToPDF(doc, tableData, headers, 18, {
-      fontSize: 8,
-      styles: {
-        overflow: 'linebreak',
-        cellPadding: 1,
-        lineColor: [80, 80, 80],
-        lineWidth: 0.1,
-        font: 'Roboto',
-        fontStyle: 'normal'
-      },
-      headStyles: {
-        halign: 'center',
-        valign: 'middle',
-        fillColor: [0, 113, 188],
-        textColor: [255, 255, 255],
-        fontSize: 8,
-        font: 'Roboto',
-        fontStyle: 'normal'
-      },
-      columnStyles: {
-        0: { halign: 'left', font: 'Roboto', fontStyle: 'normal' },
-        1: { halign: 'center', font: 'Roboto', fontStyle: 'normal' },
-        2: { halign: 'left', overflow: 'linebreak', font: 'Roboto', fontStyle: 'normal' },
-        3: { halign: 'center', font: 'Roboto', fontStyle: 'normal' },
-        4: { halign: 'right', font: 'Roboto', fontStyle: 'normal' },
-        5: { halign: 'center', font: 'Roboto', fontStyle: 'normal' },
-        6: { halign: 'left', font: 'Roboto', fontStyle: 'normal' },
-        7: { halign: 'left', font: 'Roboto', fontStyle: 'normal' },
-        8: { halign: 'left', font: 'Roboto', fontStyle: 'normal' },
-        9: { halign: 'left', font: 'Roboto', fontStyle: 'normal' }
-      }
-    });
-    
-    // Сохраняем PDF
-    const filename = `Ozon_Orders_List_${timestamp}.pdf`;
-    doc.save(filename);
-    console.log('PDF со списком заказов Ozon сгенерирован');
-  } catch (error) {
-    console.error('Ошибка при генерации PDF со списком Ozon:', error);
-    alert('Произошла ошибка при создании PDF. Подробности в консоли.');
-  }
-};
-
-/**
- * Генерация PDF со стикерами для заказов Ozon
- */
-export const generateOzonStickersPDF = async (orders: OzonOrder[]) => {
-  try {
-    const ordersWithStickers = orders.filter(order => order.sticker_pdf);
-    
-    if (ordersWithStickers.length === 0) {
-      console.log('Нет заказов Ozon со стикерами');
-      alert('Нет заказов Ozon со стикерами для генерации PDF');
-      return;
-    }
-    
-    // Получаем URLs стикеров
-    const stickerUrls = ordersWithStickers.map(order => `http://62.113.44.196:8080${order.sticker_pdf}`);
-    
-    // Объединяем PDF-файлы стикеров с дедупликацией
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const fileName = `Ozon_Stickers_${timestamp}.pdf`;
-    
-    const mergedPdfBlob = await mergePDFsWithoutDuplicates(stickerUrls);
-    downloadBlob(mergedPdfBlob, fileName);
-    
-    console.log(`PDF со стикерами Ozon сгенерирован (устранены дубликаты)`);
-    alert(`PDF со стикерами Ozon успешно сгенерирован (устранены дубликаты)`);
-  } catch (error) {
-    console.error('Ошибка при генерации PDF со стикерами Ozon:', error);
-    alert(`Ошибка при генерации стикеров Ozon: ${error instanceof Error ? error.message : String(error)}`);
-  }
-};
-
-/**
  * Генерация PDF со штрих-кодами поставок Ozon
  */
 export const generateOzonSupplyStickersPDF = async (orders: OzonOrder[]) => {
@@ -782,17 +448,20 @@ export const generateOzonSupplyStickersPDF = async (orders: OzonOrder[]) => {
           0, // x - начинаем с левого края
           0, // y - начинаем с верхнего края
           PDF_WIDTH, // используем всю ширину
-          PDF_HEIGHT // используем всю высоту
+          PDF_HEIGHT * 0.8 // используем 80% высоты для изображения
         );
         
-        // Если есть текст штрих-кода, добавляем его внизу
+        // Добавляем только номер поставки без лишнего текста
         if (order.supply_barcode_text) {
-          pdfDoc.setFontSize(8);
+          // Очищаем строку от префикса %960% и других лишних символов
+          const cleanBarcode = order.supply_barcode_text.replace(/%960%/g, "").trim();
+          
+          pdfDoc.setFontSize(10);
           pdfDoc.setTextColor(0, 0, 0);
           pdfDoc.text(
-            order.supply_barcode_text,
+            cleanBarcode,
             PDF_WIDTH / 2,
-            PDF_HEIGHT - 2,
+            PDF_HEIGHT - 5,
             { align: 'center' }
           );
         }
@@ -842,152 +511,6 @@ export const generateOzonSupplyStickersPDF = async (orders: OzonOrder[]) => {
   } catch (error) {
     console.error('Ошибка при генерации PDF со штрих-кодами поставок Ozon:', error);
     // Не показываем alert, т.к. это необязательная опция
-  }
-};
-
-/**
- * Генерация PDF с изображениями штрих-кодов поставок Ozon
- */
-export const generateOzonBarcodeImagesPDF = async (orders: OzonOrder[]) => {
-  try {
-    // Отбираем только заказы со штрих-кодами поставок
-    const ordersWithBarcodes = orders.filter(order => 
-      order.supply_barcode_image && order.supply_barcode_text
-    );
-    
-    if (ordersWithBarcodes.length === 0) {
-      console.log('Нет заказов Ozon со штрих-кодами поставок');
-      return;
-    }
-    
-    // Дедупликация по supply_barcode_text (штрих-код поставки)
-    const uniqueOrders = new Map<string, OzonOrder>();
-    
-    // Группируем по supply_barcode_text
-    for (const order of ordersWithBarcodes) {
-      if (!order.supply_barcode_text) continue;
-      
-      // Используем supply_barcode_text как уникальный ключ
-      // Удаляем пробелы и переносы для нормализации ключа
-      const key = order.supply_barcode_text.replace(/\s+/g, '');
-      
-      // Сохраняем заказ, если уникальный supply_barcode_text
-      if (!uniqueOrders.has(key)) {
-        uniqueOrders.set(key, order);
-      }
-    }
-    
-    const deduplicatedOrders = Array.from(uniqueOrders.values());
-    console.log(`Найдено ${ordersWithBarcodes.length} заказов со штрих-кодами, после дедупликации: ${deduplicatedOrders.length}`);
-    
-    // Настройка PDF - сетка изображений
-    const pdfArray: Blob[] = [];
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `Ozon_Barcode_Images_${timestamp}.pdf`;
-    
-    // Для каждого уникального штрих-кода создаем изображение
-    const processOrder = async (order: OzonOrder) => {
-      try {
-        // Пропускаем заказы без штрих-кода
-        if (!order.supply_barcode_image || !order.supply_barcode_text) {
-          return null;
-        }
-        
-        // Загружаем изображение штрих-кода
-        const imgUrl = `http://62.113.44.196:8080${order.supply_barcode_image}`;
-        const imgResponse = await fetch(imgUrl);
-        if (!imgResponse.ok) return null;
-        
-        // Конвертируем изображение в формат, подходящий для jsPDF
-        const imgBlob = await imgResponse.blob();
-        const imgBase64 = await blobToBase64(imgBlob);
-        
-        // Создаем PDF для изображения
-        const pdf = new jsPDF();
-        const pageWidth = pdf.internal.pageSize.getWidth();
-        const pageHeight = pdf.internal.pageSize.getHeight();
-        
-        // Настраиваем размер изображения
-        const imageWidth = pageWidth - 20; // отступы слева и справа
-        const imageHeight = 100; // высота изображения
-        
-        // Позиция изображения
-        const imageX = 10; // отступ слева
-        const imageY = 30; // отступ сверху
-        
-        // Добавляем название
-        pdf.setFontSize(16);
-        pdf.text('Штрих-код поставки Ozon', pageWidth / 2, 15, { align: 'center' });
-        
-        // Добавляем изображение
-        pdf.addImage(imgBase64, 'JPEG', imageX, imageY, imageWidth, imageHeight);
-        
-        // Добавляем текст штрих-кода
-        pdf.setFontSize(12);
-        pdf.text(`Код: ${order.supply_barcode_text}`, pageWidth / 2, imageY + imageHeight + 10, { align: 'center' });
-        
-        if (order.order_id) {
-          pdf.setFontSize(10);
-          pdf.text(`Заказ: ${order.order_id}`, pageWidth / 2, imageY + imageHeight + 20, { align: 'center' });
-        }
-        
-        // Возвращаем blob PDF
-        return pdf.output('blob');
-      } catch (error) {
-        console.error(`Ошибка при создании изображения для заказа ${order.order_id}:`, error);
-        return null;
-      }
-    };
-    
-    // Обрабатываем все штрих-коды последовательно
-    for (const order of deduplicatedOrders) {
-      const blob = await processOrder(order);
-      if (blob) {
-        pdfArray.push(blob);
-      }
-    }
-    
-    if (pdfArray.length === 0) {
-      alert('Не удалось создать PDF ни для одного штрих-кода Ozon');
-      return;
-    }
-    
-    // Объединяем все PDF в один файл
-    const { PDFDocument } = await import('pdf-lib');
-    
-    try {
-      // Создаем новый PDF документ
-      const mergedPdf = await PDFDocument.create();
-      
-      // Для каждого Blob добавляем страницы в объединенный PDF
-      for (const blob of pdfArray) {
-        // Преобразуем Blob в ArrayBuffer
-        const arrayBuffer = await blob.arrayBuffer();
-        // Загружаем PDF из ArrayBuffer
-        const pdf = await PDFDocument.load(arrayBuffer);
-        // Копируем все страницы в объединенный PDF
-        const pageIndices = Array.from({ length: pdf.getPageCount() }, (_, i) => i);
-        const copiedPages = await mergedPdf.copyPages(pdf, pageIndices);
-        for (const page of copiedPages) {
-          mergedPdf.addPage(page);
-        }
-      }
-      
-      // Сохраняем объединенный PDF
-      const mergedPdfBytes = await mergedPdf.save();
-      const mergedPdfBlob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
-      
-      // Скачиваем созданный PDF
-      downloadBlob(mergedPdfBlob, filename);
-      
-      console.log(`PDF с изображениями штрих-кодов поставок Ozon сгенерирован: ${pdfArray.length} уникальных штрих-кодов`);
-    } catch (error) {
-      console.error('Ошибка при объединении PDF с изображениями штрих-кодов:', error);
-      alert(`Ошибка при объединении PDF: ${error instanceof Error ? error.message : 'неизвестная ошибка'}`);
-    }
-  } catch (error) {
-    console.error('Ошибка при генерации PDF с изображениями штрих-кодов поставок Ozon:', error);
-    alert(`Ошибка: ${error instanceof Error ? error.message : 'неизвестная ошибка'}`);
   }
 };
 
@@ -1404,5 +927,332 @@ export const generateWbMergedStickersPDF = async (orders: WbOrder[]) => {
   } catch (error) {
     console.error('Ошибка при генерации PDF с объединенными штрих-кодами Wildberries:', error);
     alert(`Ошибка при генерации PDF с объединенными штрих-кодами Wildberries: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+/**
+ * Генерация PDF со штрих-кодом поставки Wildberries
+ * @param supply_barcode - штрих-код поставки в формате base64
+ * @param supply_id - идентификатор поставки
+ */
+export const generateSupplyBarcodePDF = async (supply_barcode: string, supply_id: string): Promise<void> => {
+  try {
+    if (!supply_barcode || !isBase64Image(supply_barcode)) {
+      throw new Error('Недействительный штрих-код поставки');
+    }
+
+    // Точные размеры стикера
+    const PDF_WIDTH = 58; // ширина стикера в мм
+    const PDF_HEIGHT = 40; // высота стикера в мм
+    
+    // Создаем PDF документ с заданным размером
+    const pdfDoc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: [PDF_WIDTH, PDF_HEIGHT],
+      hotfixes: ['px_scaling'] // Исправление для масштабирования пикселей
+    });
+    
+    // Преобразуем base64 в данные для jsPDF
+    const imageData = getImageSrcFromBase64(supply_barcode);
+    
+    // Добавляем штрих-код на страницу
+    pdfDoc.addImage(
+      imageData, 
+      'PNG', 
+      0, // x - начинаем с левого края
+      0, // y - начинаем с верхнего края
+      PDF_WIDTH, // используем всю ширину
+      PDF_HEIGHT * 0.9 // используем 90% высоты
+    );
+    
+    // Добавляем supply_id внизу страницы
+    pdfDoc.setFontSize(8);
+    pdfDoc.setTextColor(0, 0, 0);
+    pdfDoc.text(
+      `Поставка: ${supply_id}`,
+      PDF_WIDTH / 2,
+      PDF_HEIGHT - 2,
+      { align: 'center' }
+    );
+    
+    // Формируем имя файла и сохраняем PDF
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileName = `WB_Supply_${supply_id}_${timestamp}.pdf`;
+    pdfDoc.save(fileName);
+    
+    console.log(`PDF со штрих-кодом поставки ${supply_id} сгенерирован`);
+  } catch (error) {
+    console.error('Ошибка при генерации PDF со штрих-кодом поставки:', error);
+    throw error;
+  }
+};
+
+/**
+ * Генерирует набор отчетов по заказам Ozon
+ * @param orders Список заказов Ozon
+ * @param legalEntity Информация о юридическом лице
+ */
+export const generateOzonReportsPDF = async (
+  orders: OzonOrder[], 
+  legalEntity?: LegalEntity
+): Promise<void> => {
+  try {
+    // Если нет заказов, не создаем PDF
+    if (orders.length === 0) {
+      console.log('Нет заказов Ozon для создания отчетов');
+      return;
+    }
+
+    // Создаем PDF документ с поддержкой кириллицы в альбомной ориентации
+    const doc = await createPDFWithCyrillicSupport({ orientation: 'landscape' });
+    
+    // Текущий временной штамп для имени файла
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    
+    // Добавляем заголовок документа
+    doc.setFont('Roboto');
+    doc.setFontSize(16);
+    const title = 'Список заказов Ozon';
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const textWidth = doc.getStringUnitWidth(title) * 16 / doc.internal.scaleFactor;
+    const x = (pageWidth - textWidth) / 2;
+    doc.text(title, x, 15);
+    
+    // Формируем данные для таблицы
+    const tableData = orders.map(order => {
+      // Получаем название товара, артикул и цену
+      const productName = order.products?.[0]?.name || order.product_name || order.name || '';
+      const sku = order.products?.[0]?.sku || order.sku || order.offer_id || '';
+      const price = formatPrice(order.products?.[0]?.price || order.price || order.sale_price || 0);
+      const quantity = order.products?.[0]?.quantity || 1;
+      
+      return [
+        order.order_id?.toString() || '',
+        order.posting_number?.toString() || '',
+        sku,
+        productName,
+        order.status || '',
+        price,
+        quantity.toString(),
+        formatDate(order.in_process_at || order.created_at || order.created_date || ''),
+        order.delivery_method?.warehouse || order.city || '',
+        order.delivery_method?.name || order.delivery_type || ''
+      ].map(String);
+    });
+    
+    // Заголовки таблицы
+    const headers = [
+      'ID заказа', 
+      'Номер отправления', 
+      'Артикул',
+      'Название товара',
+      'Статус',
+      'Цена',
+      'Кол-во',
+      'Дата',
+      'Склад',
+      'Доставка'
+    ];
+    
+    // Добавляем таблицу
+    addTableToPDF(doc, tableData, headers, 18, {
+      fontSize: 8,
+      styles: {
+        overflow: 'linebreak',
+        cellPadding: 1,
+        lineColor: [80, 80, 80],
+        lineWidth: 0.1,
+        font: 'Roboto',
+        fontStyle: 'normal'
+      },
+      headStyles: {
+        halign: 'center',
+        valign: 'middle',
+        fillColor: [0, 123, 255],
+        textColor: [255, 255, 255],
+        fontSize: 8,
+        font: 'Roboto',
+        fontStyle: 'normal'
+      },
+      columnStyles: {
+        0: { halign: 'center', font: 'Roboto', fontStyle: 'normal' },
+        1: { halign: 'center', font: 'Roboto', fontStyle: 'normal' },
+        2: { halign: 'center', font: 'Roboto', fontStyle: 'normal' },
+        3: { halign: 'left', overflow: 'linebreak', font: 'Roboto', fontStyle: 'normal' },
+        4: { halign: 'center', font: 'Roboto', fontStyle: 'normal' },
+        5: { halign: 'right', font: 'Roboto', fontStyle: 'normal' },
+        6: { halign: 'center', font: 'Roboto', fontStyle: 'normal' },
+        7: { halign: 'center', font: 'Roboto', fontStyle: 'normal' },
+        8: { halign: 'left', font: 'Roboto', fontStyle: 'normal' },
+        9: { halign: 'left', font: 'Roboto', fontStyle: 'normal' }
+      },
+      columnWidths: [
+        10, // ID заказа
+        15, // Номер отправления
+        10, // Артикул
+        25, // Название товара
+        10, // Статус
+        8,  // Цена
+        5,  // Количество
+        10, // Дата
+        10, // Склад
+        10  // Доставка
+      ]
+    });
+    
+    // Сохраняем PDF
+    const filename = `Ozon_Orders_List_${timestamp}.pdf`;
+    doc.save(filename);
+    console.log('PDF со списком заказов Ozon сгенерирован');
+    
+    // Объединяем стикеры если они есть
+    const ordersWithStickers = orders.filter(order => order.sticker_pdf);
+    if (ordersWithStickers.length > 0) {
+      try {
+        // Получаем URLs стикеров
+        const stickerUrls = ordersWithStickers.map(order => `http://62.113.44.196:8080${order.sticker_pdf}`);
+        
+        // Объединяем PDF-файлы стикеров с дедупликацией
+        const stickerFileName = `Ozon_Stickers_${timestamp}.pdf`;
+        
+        const mergedPdfBlob = await mergePDFsWithoutDuplicates(stickerUrls);
+        downloadBlob(mergedPdfBlob, stickerFileName);
+        
+        console.log(`PDF со стикерами Ozon сгенерирован (устранены дубликаты)`);
+      } catch (error) {
+        console.error('Ошибка при генерации PDF со стикерами Ozon:', error);
+      }
+    }
+  } catch (error) {
+    console.error('Ошибка при генерации PDF для Ozon:', error);
+    alert(`Произошла ошибка при генерации PDF: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+/**
+ * Генерация PDF с изображениями штрих-кодов поставок Ozon
+ */
+export const generateOzonBarcodeImagesPDF = async (orders: OzonOrder[]) => {
+  try {
+    // Отбираем только заказы со штрих-кодами поставок в виде изображений
+    const ordersWithBarcodes = orders.filter(order => 
+      order.supply_barcode_image
+    );
+    
+    if (ordersWithBarcodes.length === 0) {
+      console.log('Нет заказов Ozon с изображениями штрих-кодов поставок');
+      alert('Нет заказов Ozon с изображениями штрих-кодов поставок');
+      return;
+    }
+    
+    // Дедупликация по supply_barcode_image
+    const uniqueOrders = new Map<string, OzonOrder>();
+    
+    // Группируем по supply_barcode_image (или используем другие поля как ключи)
+    for (const order of ordersWithBarcodes) {
+      if (!order.supply_barcode_image) continue;
+      
+      // Используем supply_barcode_image как ключ для уникальности
+      const key = order.supply_barcode_image;
+      
+      // Сохраняем заказ, если уникальный supply_barcode_image
+      if (!uniqueOrders.has(key)) {
+        uniqueOrders.set(key, order);
+      }
+    }
+    
+    const deduplicatedOrders = Array.from(uniqueOrders.values());
+    console.log(`Найдено ${ordersWithBarcodes.length} заказов с изображениями штрих-кодов, после дедупликации: ${deduplicatedOrders.length}`);
+    
+    // Создаем PDF документ
+    const doc = await createPDFWithCyrillicSupport();
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    
+    // Добавляем заголовок
+    doc.setFontSize(16);
+    doc.text('Изображения штрих-кодов поставок Ozon', 10, 15);
+    
+    let yPosition = 30; // Начальная позиция Y для первого изображения
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const imageWidth = pageWidth - 20; // Ширина изображения (с отступами по 10мм с каждой стороны)
+    const imageHeight = 50; // Высота изображения в мм
+    const pageHeight = doc.internal.pageSize.getHeight();
+    
+    // Добавляем каждое изображение в PDF
+    for (let i = 0; i < deduplicatedOrders.length; i++) {
+      const order = deduplicatedOrders[i];
+      
+      // Проверяем, что у заказа есть изображение штрих-кода
+      if (!order.supply_barcode_image) continue;
+      
+      // Если текущее изображение не помещается на странице, добавляем новую страницу
+      if (yPosition + imageHeight + 15 > pageHeight) { // 15мм для текста и отступа
+        doc.addPage();
+        yPosition = 20;
+      }
+      
+      try {
+        // Загружаем изображение
+        const imgUrl = `http://62.113.44.196:8080${order.supply_barcode_image}`;
+        const imgResponse = await fetch(imgUrl);
+        if (!imgResponse.ok) continue;
+        
+        // Конвертируем изображение в формат base64
+        const imgBlob = await imgResponse.blob();
+        const imgBase64 = await blobToBase64(imgBlob);
+        
+        // Добавляем изображение в PDF
+        doc.addImage(
+          imgBase64,
+          'JPEG',
+          10, // x - отступ слева 10мм
+          yPosition, // y - текущая позиция
+          imageWidth, // ширина с отступами
+          imageHeight // высота
+        );
+        
+        // Добавляем подпись с информацией о штрих-коде
+        yPosition += imageHeight + 5;
+        doc.setFontSize(10);
+        
+        // Очищаем строку от префикса %960% и других лишних символов
+        let barcodeText = 'Штрих-код поставки';
+        if (order.supply_barcode_text) {
+          const cleanBarcode = order.supply_barcode_text.replace(/%960%/g, "").trim();
+          barcodeText = `${barcodeText}: ${cleanBarcode}`;
+        }
+        
+        doc.text(barcodeText, 10, yPosition);
+        
+        // Добавляем информацию о заказе
+        yPosition += 5;
+        let orderInfo = '';
+        if (order.posting_number) {
+          orderInfo += `Отправление: ${order.posting_number}`;
+        }
+        if (order.order_id) {
+          orderInfo += orderInfo ? `, Заказ: ${order.order_id}` : `Заказ: ${order.order_id}`;
+        }
+        if (orderInfo) {
+          doc.text(orderInfo, 10, yPosition);
+        }
+        
+        // Увеличиваем позицию Y для следующего изображения
+        yPosition += 15;
+      } catch (error) {
+        console.error(`Ошибка при добавлении изображения штрих-кода для заказа ${order.order_id}:`, error);
+      }
+    }
+    
+    // Сохраняем PDF
+    const fileName = `Ozon_Barcode_Images_${timestamp}.pdf`;
+    doc.save(fileName);
+    
+    console.log(`PDF с изображениями штрих-кодов поставок Ozon сгенерирован: ${deduplicatedOrders.length} уникальных изображений`);
+    alert(`PDF с ${deduplicatedOrders.length} изображениями штрих-кодов поставок Ozon успешно сгенерирован`);
+  } catch (error) {
+    console.error('Ошибка при генерации PDF с изображениями штрих-кодов поставок Ozon:', error);
+    alert(`Ошибка при генерации PDF с изображениями штрих-кодов поставок Ozon: ${error instanceof Error ? error.message : String(error)}`);
   }
 }; 
