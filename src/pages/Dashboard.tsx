@@ -2965,7 +2965,7 @@ const Dashboard: React.FC = () => {
                           />
                           <SortableColumnHeader
                             column="products.quantity"
-                            title="Количество"
+                            title="Кол-во"
                             currentSortColumn={ozonSortColumn}
                             currentSortDirection={ozonSortDirection}
                             onSort={handleOzonSort}

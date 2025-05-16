@@ -27,7 +27,7 @@ const Sidebar: React.FC<SidebarProps> = () => {
         
         <li className={`sidebar-item ${isActive('/legal-entities') ? 'active' : ''}`}>
           <Link to="/legal-entities" className="sidebar-link" title="Юридические лица">
-            <span className="marketplace-badge le">ЮР</span>
+            <span className="marketplace-badge le">ЮЛ</span>
           </Link>
         </li>
         
