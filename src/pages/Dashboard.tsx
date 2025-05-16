@@ -31,7 +31,7 @@ import {
 } from '../services/yandexMarketApi';
 import { formatDate, formatPrice } from '../utils/orderUtils';
 import { getBadgeColor, getStatusText } from '../utils/statusHelpers';
-import { mergePDFsInOrder, downloadBlob } from '../utils/pdfUtils';
+import { mergePDFsInOrder, downloadBlob, mergePDFsWithoutDuplicates } from '../utils/pdfUtils';
 
 // Импортируем сервис генерации PDF
 import { 
@@ -130,31 +130,16 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     // Сброс текущей страницы Wildberries при изменении фильтра WB
     setWbCurrentPage(1);
-    
-    // Обновление данных при изменении фильтра
-    if (selectedLegalEntity) {
-      updateWbDatabase();
-    }
   }, [wbStatusWbFilter]);
 
   useEffect(() => {
     // Сброс текущей страницы Ozon при изменении фильтра Ozon
     setOzonCurrentPage(1);
-    
-    // Обновление данных при изменении фильтра
-    if (selectedLegalEntity) {
-      updateOzonDatabase();
-    }
   }, [ozonStatusFilter]);
 
   useEffect(() => {
     // Сброс текущей страницы Yandex Market при изменении фильтра Yandex Market
     setYmCurrentPage(1);
-    
-    // Обновление данных при изменении фильтра
-    if (selectedLegalEntity && selectedMarketplace === 'yandex-market') {
-      loadYandexMarketOrders(selectedLegalEntity);
-    }
   }, [ymStatusFilter]);
 
   /**
@@ -640,13 +625,13 @@ const Dashboard: React.FC = () => {
     console.log('Генерация отчетов для заказов:', sortedByNmId);
     
     try {
-      // Шаг 1: Генерируем сводку по артикулам в Excel
-      console.log('Генерация Excel: Сводка по артикулам');
-      generateArticlesSummaryExcel(sortedByNmId, selectedLegalEntity || undefined);
+                      // Шаг 1: Генерируем сводку по артикулам в Excel
+                console.log('Генерация Excel: Сводка по артикулам');
+                generateArticlesSummaryExcel(sortedByNmId, selectedLegalEntity ?? undefined);
       
       // Шаг 2: Генерируем PDF со списком всех заказов
       console.log('Генерация PDF: Список всех заказов');
-      generateOrdersListPDF(sortedByNmId, selectedLegalEntity || undefined);
+      generateOrdersListPDF(sortedByNmId, selectedLegalEntity ?? undefined);
       
       // Шаг 3: Генерируем PDF со стикерами
       console.log('Генерация PDF: Наклейки для заказов');
@@ -1123,12 +1108,24 @@ const Dashboard: React.FC = () => {
   };
 
   /**
-   * Функция для получения отсортированных заказов Wildberries
+   * Функция для получения отсортированных заказов Wildberries с удалением дубликатов
    */
-  const getSortedWbOrders = () => {
+  const getSortedWbOrders = (): WbOrder[] => {
     if (!wbSortColumn) return wbOrders;
 
-    return [...wbOrders].sort((a, b) => {
+    // Создаем карту заказов по их ID для устранения дубликатов
+    const uniqueOrdersMap = new Map<string, WbOrder>();
+    
+    // Добавляем заказы в карту, используя order_id или id как ключ
+    wbOrders.forEach((order: WbOrder) => {
+      const orderId = order.order_id || order.id || '';
+      uniqueOrdersMap.set(String(orderId), order);
+    });
+    
+    // Преобразуем карту обратно в массив без дубликатов
+    const uniqueOrders = Array.from(uniqueOrdersMap.values());
+
+    return [...uniqueOrders].sort((a: WbOrder, b: WbOrder): number => {
       // Проверка на сортировку по дате
       if (wbSortColumn === 'created_at') {
         const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
@@ -1165,126 +1162,26 @@ const Dashboard: React.FC = () => {
       }
     });
   };
-
+  
   /**
-   * Функция для получения заказов Wildberries текущей страницы
+   * Функция для получения отсортированных заказов Yandex Market с удалением дубликатов
    */
-  const getCurrentPageWbOrders = () => {
-    const filteredOrders = getFilteredWbOrders();
-    const totalPages = Math.ceil(filteredOrders.length / wbItemsPerPage);
-    
-    // Убедимся, что текущая страница не выходит за пределы количества страниц
-    const currentPage = Math.min(wbCurrentPage, Math.max(totalPages, 1));
-    
-    const indexOfLastItem = currentPage * wbItemsPerPage;
-    const indexOfFirstItem = indexOfLastItem - wbItemsPerPage;
-    return filteredOrders.slice(indexOfFirstItem, indexOfLastItem);
-  };
-
-  /**
-   * Функция для получения отсортированных заказов Ozon
-   */
-  const getSortedOzonOrders = () => {
-    if (!ozonSortColumn) return ozonOrders;
-
-    return [...ozonOrders].sort((a, b) => {
-      // Проверка на сортировку по дате
-      if (ozonSortColumn === 'created_at' || ozonSortColumn === 'in_process_at' || ozonSortColumn === 'created_date') {
-        // Находим первое непустое поле с датой
-        const getDateValue = (order: OzonOrder) => {
-          if (ozonSortColumn === 'created_at' && order.created_at) {
-            return new Date(order.created_at).getTime();
-          } else if (ozonSortColumn === 'in_process_at' && order.in_process_at) {
-            return new Date(order.in_process_at).getTime();
-          } else if (order.created_date) {
-            return new Date(order.created_date).getTime();
-          }
-          return 0;
-        };
-        
-        const dateA = getDateValue(a);
-        const dateB = getDateValue(b);
-        
-        return ozonSortDirection === 'asc' ? dateA - dateB : dateB - dateA;
-      }
-      
-      // Обработка числовых полей
-      if (ozonSortColumn === 'price' || ozonSortColumn === 'sale_price') {
-        // Берем первое непустое значение
-        const getPriceValue = (order: OzonOrder) => {
-          if (ozonSortColumn === 'price' && order.price !== undefined) {
-            return parseFloat(String(order.price || 0));
-          }
-          return parseFloat(String(order.sale_price || 0));
-        };
-        
-        const numA = getPriceValue(a);
-        const numB = getPriceValue(b);
-        
-        return ozonSortDirection === 'asc' ? numA - numB : numB - numA;
-      }
-      
-      // Для нескольких возможных полей с тем же значением
-      let valueA, valueB;
-      
-      // Обработка полей с несколькими возможными именами
-      if (ozonSortColumn === 'product_name') {
-        valueA = a.product_name || a.name || '';
-        valueB = b.product_name || b.name || '';
-      } else if (ozonSortColumn === 'sku') {
-        valueA = a.sku || a.offer_id || '';
-        valueB = b.sku || b.offer_id || '';
-      } else if (ozonSortColumn === 'city') {
-        valueA = a.city || (a.delivery_method?.warehouse ? a.delivery_method.warehouse.split(',')[0] : '');
-        valueB = b.city || (b.delivery_method?.warehouse ? b.delivery_method.warehouse.split(',')[0] : '');
-      } else if (ozonSortColumn === 'delivery_type') {
-        valueA = a.delivery_type || (a.delivery_method ? a.delivery_method.name : '');
-        valueB = b.delivery_type || (b.delivery_method ? b.delivery_method.name : '');
-      } else {
-        // Для остальных полей
-        valueA = a[ozonSortColumn as keyof OzonOrder];
-        valueB = b[ozonSortColumn as keyof OzonOrder];
-      }
-      
-      // Обработка значений null или undefined
-      if (valueA === null || valueA === undefined) valueA = '';
-      if (valueB === null || valueB === undefined) valueB = '';
-      
-      // Преобразование к строке для сравнения
-      const strA = String(valueA).toLowerCase();
-      const strB = String(valueB).toLowerCase();
-      
-      // Сортировка
-      if (ozonSortDirection === 'asc') {
-        return strA.localeCompare(strB);
-      } else {
-        return strB.localeCompare(strA);
-      }
-    });
-  };
-
-  /**
-   * Функция для получения заказов Ozon текущей страницы
-   */
-  const getCurrentPageOzonOrders = () => {
-    const filteredOrders = getFilteredOzonOrders();
-    const totalPages = Math.ceil(filteredOrders.length / ozonItemsPerPage);
-    
-    // Убедимся, что текущая страница не выходит за пределы количества страниц
-    const currentPage = Math.min(ozonCurrentPage, Math.max(totalPages, 1));
-    
-    const indexOfLastItem = currentPage * ozonItemsPerPage;
-    const indexOfFirstItem = indexOfLastItem - ozonItemsPerPage;
-    return filteredOrders.slice(indexOfFirstItem, indexOfLastItem);
-  };
-
-  /**
-   * Функция для получения отсортированных заказов Yandex Market
-   */
-  const getSortedYmOrders = () => {
+  const getSortedYmOrders = (): YandexMarketOrder[] => {
     if (!ymSortColumn) return ymOrders;
+    
+    // Создаем карту заказов по их ID для устранения дубликатов
+    const uniqueOrdersMap = new Map<string, YandexMarketOrder>();
+    
+    // Добавляем заказы в карту, используя order_id или id как ключ
+    ymOrders.forEach((order: YandexMarketOrder) => {
+      const orderId = order.order_id || order.id || '';
+      uniqueOrdersMap.set(String(orderId), order);
+    });
+    
+    // Преобразуем карту обратно в массив без дубликатов
+    const uniqueOrders = Array.from(uniqueOrdersMap.values());
 
-    return [...ymOrders].sort((a, b) => {
+    return [...uniqueOrders].sort((a: YandexMarketOrder, b: YandexMarketOrder): number => {
       // Проверка на сортировку по дате
       if (ymSortColumn === 'created_at' || ymSortColumn === 'created_date') {
         const dateA = a[ymSortColumn as keyof YandexMarketOrder] 
@@ -1299,7 +1196,7 @@ const Dashboard: React.FC = () => {
       
       // Обработка числовых полей
       if (ymSortColumn === 'price' || ymSortColumn === 'total_price') {
-        const getPriceValue = (order: YandexMarketOrder) => {
+        const getPriceValue = (order: YandexMarketOrder): number => {
           if (ymSortColumn === 'price' && order.price !== undefined) {
             return parseFloat(String(order.price || 0));
           }
@@ -1349,18 +1246,87 @@ const Dashboard: React.FC = () => {
   };
 
   /**
-   * Функция для получения заказов Yandex Market текущей страницы
+   * Функция для получения заказов Wildberries текущей страницы без дубликатов
+   */
+  const getCurrentPageWbOrders = () => {
+    const filteredOrders = getFilteredWbOrders();
+    
+    // Дедупликация заказов
+    const uniqueOrdersMap = new Map();
+    filteredOrders.forEach(order => {
+      const orderId = String(order.order_id || order.id || '');
+      if (orderId) {
+        uniqueOrdersMap.set(orderId, order);
+      }
+    });
+    
+    // Преобразуем Map обратно в массив
+    const uniqueOrders = Array.from(uniqueOrdersMap.values());
+    
+    const totalPages = Math.ceil(uniqueOrders.length / wbItemsPerPage);
+    
+    // Убедимся, что текущая страница не выходит за пределы количества страниц
+    const currentPage = Math.min(wbCurrentPage, Math.max(totalPages, 1));
+    
+    const indexOfLastItem = currentPage * wbItemsPerPage;
+    const indexOfFirstItem = indexOfLastItem - wbItemsPerPage;
+    return uniqueOrders.slice(indexOfFirstItem, indexOfLastItem);
+  };
+
+  /**
+   * Функция для получения заказов Ozon текущей страницы без дубликатов
+   */
+  const getCurrentPageOzonOrders = () => {
+    const filteredOrders = getFilteredOzonOrders();
+    
+    // Дедупликация заказов на основе posting_number и order_id
+    const uniqueOrdersMap = new Map();
+    filteredOrders.forEach(order => {
+      const orderId = String(order.posting_number || order.order_id || '');
+      if (orderId) {
+        uniqueOrdersMap.set(orderId, order);
+      }
+    });
+    
+    // Преобразуем Map обратно в массив
+    const uniqueOrders = Array.from(uniqueOrdersMap.values());
+    
+    const totalPages = Math.ceil(uniqueOrders.length / ozonItemsPerPage);
+    
+    // Убедимся, что текущая страница не выходит за пределы количества страниц
+    const currentPage = Math.min(ozonCurrentPage, Math.max(totalPages, 1));
+    
+    const indexOfLastItem = currentPage * ozonItemsPerPage;
+    const indexOfFirstItem = indexOfLastItem - ozonItemsPerPage;
+    return uniqueOrders.slice(indexOfFirstItem, indexOfLastItem);
+  };
+
+  /**
+   * Функция для получения заказов Yandex Market текущей страницы без дубликатов
    */
   const getCurrentPageYmOrders = () => {
     const filteredOrders = getFilteredYmOrders();
-    const totalPages = Math.ceil(filteredOrders.length / ymItemsPerPage);
+    
+    // Дедупликация заказов
+    const uniqueOrdersMap = new Map();
+    filteredOrders.forEach(order => {
+      const orderId = String(order.order_id || order.id || '');
+      if (orderId) {
+        uniqueOrdersMap.set(orderId, order);
+      }
+    });
+    
+    // Преобразуем Map обратно в массив
+    const uniqueOrders = Array.from(uniqueOrdersMap.values());
+    
+    const totalPages = Math.ceil(uniqueOrders.length / ymItemsPerPage);
     
     // Убедимся, что текущая страница не выходит за пределы количества страниц
     const currentPage = Math.min(ymCurrentPage, Math.max(totalPages, 1));
     
     const indexOfLastItem = currentPage * ymItemsPerPage;
     const indexOfFirstItem = indexOfLastItem - ymItemsPerPage;
-    return filteredOrders.slice(indexOfFirstItem, indexOfLastItem);
+    return uniqueOrders.slice(indexOfFirstItem, indexOfLastItem);
   };
 
   /**
@@ -1849,12 +1815,11 @@ const Dashboard: React.FC = () => {
    * Получение отфильтрованных заказов Wildberries
    */
   const getFilteredWbOrders = () => {
-    return wbOrders.filter(order => {
-      if (wbStatusWbFilter && order.wb_status !== wbStatusWbFilter) {
-        return false;
-      }
-      return true;
-    });
+    // Фильтруем заказы только если выбран фильтр статуса WB
+    if (wbStatusWbFilter) {
+      return getSortedWbOrders().filter(order => order.wb_status === wbStatusWbFilter);
+    }
+    return getSortedWbOrders();
   };
 
   /**
@@ -1892,14 +1857,6 @@ const Dashboard: React.FC = () => {
    */
   const handleWbPageChange = (page: number) => {
     setWbCurrentPage(page);
-    
-    // Обновление данных при изменении страницы
-    if (selectedLegalEntity) {
-      // Обновляем данные с небольшой задержкой, чтобы страница успела обновиться
-      setTimeout(() => {
-        loadWildberriesOrders(selectedLegalEntity);
-      }, 100);
-    }
   };
 
   /**
@@ -1907,14 +1864,6 @@ const Dashboard: React.FC = () => {
    */
   const handleOzonPageChange = (page: number) => {
     setOzonCurrentPage(page);
-    
-    // Обновление данных при изменении страницы
-    if (selectedLegalEntity) {
-      // Обновляем данные с небольшой задержкой, чтобы страница успела обновиться
-      setTimeout(() => {
-        loadOzonOrders(selectedLegalEntity);
-      }, 100);
-    }
   };
 
   /**
@@ -1922,14 +1871,6 @@ const Dashboard: React.FC = () => {
    */
   const handleYmPageChange = (page: number) => {
     setYmCurrentPage(page);
-    
-    // Обновление данных при изменении страницы
-    if (selectedLegalEntity && selectedMarketplace === 'yandex-market') {
-      // Обновляем данные с небольшой задержкой, чтобы страница успела обновиться
-      setTimeout(() => {
-        loadYandexMarketOrders(selectedLegalEntity);
-      }, 100);
-    }
   };
 
   /**
@@ -1941,13 +1882,8 @@ const Dashboard: React.FC = () => {
     
     // Если текущая страница больше общего количества страниц
     if (wbCurrentPage > totalPages && totalPages > 0) {
-      // Сбрасываем на первую страницу и обновляем данные
+      // Сбрасываем на первую страницу
       setWbCurrentPage(1);
-      if (selectedLegalEntity) {
-        setTimeout(() => {
-          loadWildberriesOrders(selectedLegalEntity);
-        }, 100);
-      }
     }
     
     return (
@@ -1968,13 +1904,8 @@ const Dashboard: React.FC = () => {
     
     // Если текущая страница больше общего количества страниц
     if (ozonCurrentPage > totalPages && totalPages > 0) {
-      // Сбрасываем на первую страницу и обновляем данные
+      // Сбрасываем на первую страницу
       setOzonCurrentPage(1);
-      if (selectedLegalEntity) {
-        setTimeout(() => {
-          loadOzonOrders(selectedLegalEntity);
-        }, 100);
-      }
     }
     
     return (
@@ -2041,6 +1972,9 @@ const Dashboard: React.FC = () => {
     const allOrderIds = filteredOrders.map(order => order.id || order.order_id || '');
     setSelectedYmOrders(new Set(allOrderIds));
     setSelectAllYm(true);
+    
+    // Показываем сообщение о количестве выбранных заказов
+    alert(`Выбрано ${filteredOrders.length} заказов`);
   };
 
   /**
@@ -2071,8 +2005,8 @@ const Dashboard: React.FC = () => {
       const statusMessage = `Объединение ${stickerUrls.length} стикеров...`;
       setStatusChangeMessage(statusMessage);
       
-      // Объединяем PDF-файлы
-      const mergedPdfBlob = await mergePDFsInOrder(stickerUrls);
+      // Объединяем PDF-файлы с дедупликацией
+      const mergedPdfBlob = await mergePDFsWithoutDuplicates(stickerUrls);
       
       // Формируем имя файла с текущей датой и временем
       const now = new Date();
@@ -2088,7 +2022,7 @@ const Dashboard: React.FC = () => {
       setStatusChangeMessage('');
       
       // Выводим сообщение об успешном объединении
-      alert(`Успешно объединено ${stickerUrls.length} стикеров`);
+      alert(`Успешно объединены уникальные стикеры Ozon (устранены дубликаты)`);
     } catch (error) {
       console.error('Ошибка при объединении стикеров:', error);
       setStatusChangeLoading(false);
@@ -2219,8 +2153,8 @@ const Dashboard: React.FC = () => {
       const statusMessage = `Объединение ${stickerUrls.length} стикеров Яндекс Маркет...`;
       setStatusChangeMessage(statusMessage);
       
-      // Объединяем PDF-файлы
-      const mergedPdfBlob = await mergePDFsInOrder(stickerUrls);
+      // Объединяем PDF-файлы с дедупликацией
+      const mergedPdfBlob = await mergePDFsWithoutDuplicates(stickerUrls);
       
       // Формируем имя файла с текущей датой и временем
       const now = new Date();
@@ -2236,7 +2170,7 @@ const Dashboard: React.FC = () => {
       setStatusChangeMessage('');
       
       // Выводим сообщение об успешном объединении
-      alert(`Успешно объединено ${stickerUrls.length} стикеров Яндекс Маркет`);
+      alert(`Успешно объединены уникальные стикеры Яндекс Маркет (устранены дубликаты)`);
     } catch (error) {
       console.error('Ошибка при объединении стикеров Яндекс Маркет:', error);
       setStatusChangeLoading(false);
@@ -2291,6 +2225,147 @@ const Dashboard: React.FC = () => {
       }
       alert(errorMessage);
     }
+  };
+
+  /**
+   * Функция для формирования ключа строки таблицы
+   */
+  const getRowKey = (order: WbOrder | OzonOrder | YandexMarketOrder, prefix: string, index: number): string => {
+    let id: string | number = index;
+    
+    // Проверяем наличие полей в разных типах заказов
+    if ('posting_number' in order && order.posting_number) {
+      id = order.posting_number;
+    } else if ('order_id' in order && order.order_id) {
+      id = order.order_id;
+    } else if ('id' in order && order.id) {
+      id = order.id;
+    }
+    
+    return `${prefix}-${id}`;
+  };
+
+  /**
+   * Функция для получения отсортированных заказов Ozon с удалением дубликатов
+   */
+  const getSortedOzonOrders = (): OzonOrder[] => {
+    if (!ozonSortColumn) return ozonOrders;
+
+    // Создаем карту заказов по их ID для устранения дубликатов
+    const uniqueOrdersMap = new Map<string, OzonOrder>();
+    
+    // Добавляем заказы в карту, используя posting_number, order_id или id как ключ
+    ozonOrders.forEach((order: OzonOrder) => {
+      const orderId = order.posting_number || order.order_id || order.id || '';
+      uniqueOrdersMap.set(String(orderId), order);
+    });
+    
+    // Преобразуем карту обратно в массив без дубликатов
+    const uniqueOrders = Array.from(uniqueOrdersMap.values());
+
+    return [...uniqueOrders].sort((a: OzonOrder, b: OzonOrder): number => {
+      // Проверка на сортировку по дате
+      if (ozonSortColumn === 'created_at' || ozonSortColumn === 'in_process_at' || ozonSortColumn === 'created_date') {
+        // Находим первое непустое поле с датой
+        const getDateValue = (order: OzonOrder): number => {
+          if (ozonSortColumn === 'created_at' && order.created_at) {
+            return new Date(order.created_at).getTime();
+          } else if (ozonSortColumn === 'in_process_at' && order.in_process_at) {
+            return new Date(order.in_process_at).getTime();
+          } else if (order.created_date) {
+            return new Date(order.created_date).getTime();
+          }
+          return 0;
+        };
+        
+        const dateA = getDateValue(a);
+        const dateB = getDateValue(b);
+        
+        return ozonSortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+      }
+      
+      // Обработка полей продуктов
+      if (ozonSortColumn === 'products.quantity') {
+        const quantityA = a.products?.[0]?.quantity || 0;
+        const quantityB = b.products?.[0]?.quantity || 0;
+        
+        return ozonSortDirection === 'asc' 
+          ? Number(quantityA) - Number(quantityB) 
+          : Number(quantityB) - Number(quantityA);
+      }
+      
+      if (ozonSortColumn === 'products.price') {
+        const priceA = a.products?.[0]?.price || a.price || 0;
+        const priceB = b.products?.[0]?.price || b.price || 0;
+        
+        return ozonSortDirection === 'asc' 
+          ? Number(priceA) - Number(priceB) 
+          : Number(priceB) - Number(priceA);
+      }
+      
+      if (ozonSortColumn === 'products.name') {
+        const nameA = a.products?.[0]?.name || a.product_name || a.name || '';
+        const nameB = b.products?.[0]?.name || b.product_name || b.name || '';
+        
+        return ozonSortDirection === 'asc' 
+          ? String(nameA).localeCompare(String(nameB)) 
+          : String(nameB).localeCompare(String(nameA));
+      }
+      
+      if (ozonSortColumn === 'products.sku') {
+        const skuA = a.products?.[0]?.sku || a.sku || a.offer_id || '';
+        const skuB = b.products?.[0]?.sku || b.sku || b.offer_id || '';
+        
+        return ozonSortDirection === 'asc' 
+          ? String(skuA).localeCompare(String(skuB)) 
+          : String(skuB).localeCompare(String(skuA));
+      }
+      
+      // Обработка числовых полей
+      if (ozonSortColumn === 'price' || ozonSortColumn === 'sale_price') {
+        const valueA = Number(a[ozonSortColumn as keyof OzonOrder] || 0);
+        const valueB = Number(b[ozonSortColumn as keyof OzonOrder] || 0);
+        
+        return ozonSortDirection === 'asc' ? valueA - valueB : valueB - valueA;
+      }
+      
+      // Для нескольких возможных полей с тем же значением
+      let valueA, valueB;
+      
+      // Обработка полей с несколькими возможными именами
+      if (ozonSortColumn === 'product_name') {
+        valueA = a.product_name || a.name || '';
+        valueB = b.product_name || b.name || '';
+      } else if (ozonSortColumn === 'sku') {
+        valueA = a.sku || a.offer_id || '';
+        valueB = b.sku || b.offer_id || '';
+      } else if (ozonSortColumn === 'city') {
+        valueA = a.city || (a.delivery_method?.warehouse ? a.delivery_method.warehouse.split(',')[0] : '');
+        valueB = b.city || (b.delivery_method?.warehouse ? b.delivery_method.warehouse.split(',')[0] : '');
+      } else if (ozonSortColumn === 'delivery_type') {
+        valueA = a.delivery_type || (a.delivery_method ? a.delivery_method.name : '');
+        valueB = b.delivery_type || (b.delivery_method ? b.delivery_method.name : '');
+      } else {
+        // Для остальных полей
+        valueA = a[ozonSortColumn as keyof OzonOrder];
+        valueB = b[ozonSortColumn as keyof OzonOrder];
+      }
+      
+      // Обработка значений null или undefined
+      if (valueA === null || valueA === undefined) valueA = '';
+      if (valueB === null || valueB === undefined) valueB = '';
+      
+      // Преобразование к строке для сравнения
+      const strA = String(valueA).toLowerCase();
+      const strB = String(valueB).toLowerCase();
+      
+      // Сортировка
+      if (ozonSortDirection === 'asc') {
+        return strA.localeCompare(strB);
+      } else {
+        return strB.localeCompare(strA);
+      }
+    });
   };
 
   return (
@@ -2450,7 +2525,7 @@ const Dashboard: React.FC = () => {
                     )}
                   </Button>
                   
-
+                  
                   <Button 
                     variant="outline-success" 
                     size="sm" 
@@ -2590,7 +2665,7 @@ const Dashboard: React.FC = () => {
                       </thead>
                       <tbody>
                         {getCurrentPageWbOrders().map((order, index) => (
-                          <tr key={order.id || order.order_id || index}>
+                          <tr key={getRowKey(order, 'wb', index)}>
                             <td>
                               <Form.Check
                                 type="checkbox"
@@ -2690,7 +2765,7 @@ const Dashboard: React.FC = () => {
                   </Alert>
                 )}
                 
-                <div className="mb-3">    
+                <div className="mb-3">
                   <Button
                     variant="success"
                     size="sm"
@@ -2871,6 +2946,13 @@ const Dashboard: React.FC = () => {
                             onSort={handleOzonSort}
                           />
                           <SortableColumnHeader
+                            column="products.quantity"
+                            title="Количество"
+                            currentSortColumn={ozonSortColumn}
+                            currentSortDirection={ozonSortDirection}
+                            onSort={handleOzonSort}
+                          />
+                          <SortableColumnHeader
                             column="status"
                             title="Статус"
                             currentSortColumn={ozonSortColumn}
@@ -2915,66 +2997,67 @@ const Dashboard: React.FC = () => {
                           <th>Стикер</th>
                         </tr>
                       </thead>
-                      <tbody>
-                        {getCurrentPageOzonOrders().map((order, index) => (
-                          <tr key={order.id || order.order_id || index}>
-                            <td>
-                              <Form.Check
-                                type="checkbox"
-                                checked={selectedOzonOrders.has(order.id || order.order_id || index)}
-                                onChange={() => handleSelectOzonOrder(order.id || order.order_id || index)}
-                                aria-label={`Выбрать заказ ${order.id || order.order_id || index}`}
-                              />
-                            </td>
-                            <td>{order.posting_number || '—'}</td>
-                            <td>{order.order_id || '—'}</td>
-                            <td>{formatDate(order.in_process_at || order.created_at || order.created_date)}</td>
-                            <td>{order.products?.[0]?.name || order.product_name || order.name || '—'}</td>
-                            <td>{order.products?.[0]?.sku || order.sku || order.offer_id || '—'}</td>
-                            <td>
-                              <Badge bg={getBadgeColor(order.status)}>
-                                {getStatusText(order.status)}
-                              </Badge>
-                            </td>
-                            <td>
-                              <Badge bg={getBadgeColor(order.own_status)}>
-                                {getStatusText(order.own_status)}
-                              </Badge>
-                            </td>
-                            <td>{formatPrice(order.products?.[0]?.price || order.price || order.sale_price)}</td>
-                            <td>{order.delivery_method?.warehouse || '—'}</td>
-                            <td>{order.delivery_method?.name || '—'}</td>
-                            <td>
-                              {order.supply_barcode_text ? (
-                                <div>
-                                  <span className="d-block mb-1" style={{ fontSize: '0.85em' }}>{order.supply_barcode_text}</span>
-                                  {order.supply_barcode_image && (
-                                    <Button 
-                                      variant="outline-secondary" 
-                                      size="sm"
-                                      onClick={() => window.open(`http://62.113.44.196:8080${order.supply_barcode_image}`, '_blank')}
-                                      title="Посмотреть штрих-код поставки"
-                                    >
-                                      <i className="bi bi-file-earmark-text"></i>
-                                    </Button>
-                                  )}
-                                </div>
-                              ) : '—'}
-                            </td>
-                            <td>
-                              {order.sticker_pdf ? (
-                                <Button 
-                                  variant="outline-primary" 
-                                  size="sm"
-                                  onClick={() => window.open(`http://62.113.44.196:8080${order.sticker_pdf}`, '_blank')}
-                                  title="Скачать стикер"
-                                >
-                                  <i className="bi bi-download"></i>
-                                </Button>
-                              ) : '—'}
-                            </td>
-                          </tr>
-                        ))}
+                                              <tbody>
+                          {getCurrentPageOzonOrders().map((order, index) => (
+                            <tr key={getRowKey(order, 'ozon', index)}>
+                                  <td>
+                                    <Form.Check
+                                      type="checkbox"
+                                      checked={selectedOzonOrders.has(order.id || order.order_id || '')}
+                                      onChange={() => handleSelectOzonOrder(order.id || order.order_id || '')}
+                                      aria-label={`Выбрать заказ ${order.id || order.order_id || ''}`}
+                                    />
+                                  </td>
+                                  <td>{order.posting_number || '—'}</td>
+                                  <td>{order.order_id || '—'}</td>
+                                  <td>{formatDate(order.in_process_at || order.created_at || order.created_date)}</td>
+                                  <td>{order.products?.[0]?.name || order.product_name || order.name || '—'}</td>
+                                  <td>{order.products?.[0]?.sku || order.sku || order.offer_id || '—'}</td>
+                                  <td>{order.products?.[0]?.quantity || '—'}</td>
+                                  <td>
+                                    <Badge bg={getBadgeColor(order.status)}>
+                                      {getStatusText(order.status)}
+                                    </Badge>
+                                  </td>
+                                  <td>
+                                    <Badge bg={getBadgeColor(order.own_status)}>
+                                      {getStatusText(order.own_status)}
+                                    </Badge>
+                                  </td>
+                                  <td>{formatPrice(order.products?.[0]?.price || order.price || order.sale_price)}</td>
+                                  <td>{order.delivery_method?.warehouse || '—'}</td>
+                                  <td>{order.delivery_method?.name || '—'}</td>
+                                  <td>
+                                    {order.supply_barcode_text ? (
+                                      <div>
+                                        <span className="d-block mb-1" style={{ fontSize: '0.85em' }}>{order.supply_barcode_text}</span>
+                                        {order.supply_barcode_image && (
+                                          <Button 
+                                            variant="outline-secondary" 
+                                            size="sm"
+                                            onClick={() => window.open(`http://62.113.44.196:8080${order.supply_barcode_image}`, '_blank')}
+                                            title="Посмотреть штрих-код поставки"
+                                          >
+                                            <i className="bi bi-file-earmark-text"></i>
+                                          </Button>
+                                        )}
+                                      </div>
+                                    ) : '—'}
+                                  </td>
+                                  <td>
+                                    {order.sticker_pdf ? (
+                                      <Button 
+                                        variant="outline-primary" 
+                                        size="sm"
+                                        onClick={() => window.open(`http://62.113.44.196:8080${order.sticker_pdf}`, '_blank')}
+                                        title="Скачать стикер"
+                                      >
+                                        <i className="bi bi-download"></i>
+                                      </Button>
+                                    ) : '—'}
+                                  </td>
+                                </tr>
+                                                        ))}
                       </tbody>
                     </Table>
                     {ozonOrders.length > 0 && (
@@ -3204,7 +3287,7 @@ const Dashboard: React.FC = () => {
                       </thead>
                       <tbody>
                         {getCurrentPageYmOrders().map((order, index) => (
-                          <tr key={order.id || order.order_id || index}>
+                          <tr key={getRowKey(order, 'ym', index)}>
                             <td>
                               <Form.Check
                                 type="checkbox"

@@ -11,7 +11,9 @@ import {
   addTableToPDF,
   loadAndCacheFont,
   mergePDFsInOrder,
-  downloadBlob
+  downloadBlob,
+  mergePDFsWithoutDuplicates,
+  blobToBase64
 } from '../utils/pdfUtils';
 import { 
   formatPrice, 
@@ -691,14 +693,15 @@ export const generateOzonStickersPDF = async (orders: OzonOrder[]) => {
     // Получаем URLs стикеров
     const stickerUrls = ordersWithStickers.map(order => `http://62.113.44.196:8080${order.sticker_pdf}`);
     
-    // Объединяем PDF-файлы стикеров
+    // Объединяем PDF-файлы стикеров с дедупликацией
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const fileName = `Ozon_Stickers_${timestamp}.pdf`;
     
-    const mergedPdfBlob = await mergePDFsInOrder(stickerUrls);
+    const mergedPdfBlob = await mergePDFsWithoutDuplicates(stickerUrls);
     downloadBlob(mergedPdfBlob, fileName);
     
-    console.log(`PDF со стикерами Ozon сгенерирован: ${ordersWithStickers.length} стикеров`);
+    console.log(`PDF со стикерами Ozon сгенерирован (устранены дубликаты)`);
+    alert(`PDF со стикерами Ozon успешно сгенерирован (устранены дубликаты)`);
   } catch (error) {
     console.error('Ошибка при генерации PDF со стикерами Ozon:', error);
     alert(`Ошибка при генерации стикеров Ozon: ${error instanceof Error ? error.message : String(error)}`);
@@ -710,64 +713,78 @@ export const generateOzonStickersPDF = async (orders: OzonOrder[]) => {
  */
 export const generateOzonSupplyStickersPDF = async (orders: OzonOrder[]) => {
   try {
-    // Отбираем только заказы с supply_barcode_image
-    const ordersWithBarcodes = orders.filter(order => order.supply_barcode_image);
+    // Отбираем только заказы со штрих-кодами поставок
+    const ordersWithBarcodes = orders.filter(order => 
+      order.supply_barcode_image && order.supply_barcode_text
+    );
     
     if (ordersWithBarcodes.length === 0) {
       console.log('Нет заказов Ozon со штрих-кодами поставок');
-      return; // Тихо возвращаемся, без уведомления, т.к. это необязательная опция
+      return;
     }
+    
+    // Дедупликация по supply_barcode_text (штрих-код поставки)
+    const uniqueOrders = new Map<string, OzonOrder>();
+    
+    // Группируем по supply_barcode_text
+    for (const order of ordersWithBarcodes) {
+      if (!order.supply_barcode_text) continue;
+      
+      // Используем supply_barcode_text как уникальный ключ
+      // Удаляем пробелы и переносы для нормализации ключа
+      const key = order.supply_barcode_text.replace(/\s+/g, '');
+      
+      // Сохраняем заказ, если уникальный supply_barcode_text
+      if (!uniqueOrders.has(key)) {
+        uniqueOrders.set(key, order);
+      }
+    }
+    
+    const deduplicatedOrders = Array.from(uniqueOrders.values());
+    console.log(`Найдено ${ordersWithBarcodes.length} заказов со штрих-кодами, после дедупликации: ${deduplicatedOrders.length}`);
     
     // Создаем временную папку для хранения отдельных PDF
     const blobsArray: Blob[] = [];
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     
-    // Для каждого штрих-кода создаем отдельный PDF с правильным размером
-    for (const order of ordersWithBarcodes) {
-      // Пропускаем заказы без штрих-кода
-      if (!order.supply_barcode_image) {
-        continue;
-      }
-      
+    // Для каждого уникального штрих-кода создаем отдельный PDF с правильным размером
+    for (const order of deduplicatedOrders) {
       try {
-        // Точные размеры стикера
-        const PDF_WIDTH = 58; // ширина стикера в мм
-        const PDF_HEIGHT = 40; // высота стикера в мм
+        // Проверяем, что у заказа есть необходимые данные
+        if (!order.supply_barcode_image || !order.supply_barcode_text) {
+          continue;
+        }
+        
+        // Загружаем изображение штрих-кода
+        const imgUrl = `http://62.113.44.196:8080${order.supply_barcode_image}`;
+        const imgResponse = await fetch(imgUrl);
+        if (!imgResponse.ok) continue;
+        
+        // Конвертируем изображение в формат, подходящий для jsPDF
+        const imgBlob = await imgResponse.blob();
+        const imgBase64 = await blobToBase64(imgBlob);
+        
+        // Точные размеры штрих-кода поставки
+        const PDF_WIDTH = 100; // ширина в мм
+        const PDF_HEIGHT = 50; // высота в мм
         
         // Создаем PDF документ с заданным размером
-    const pdfDoc = new jsPDF({
-      orientation: 'landscape',
-      unit: 'mm',
-          format: [PDF_WIDTH, PDF_HEIGHT], // Точный размер стикера
-      hotfixes: ['px_scaling'] // Исправление для масштабирования пикселей
-    });
-    
-        // Полный URL для изображения штрих-кода
-        const barcodeUrl = `http://62.113.44.196:8080${order.supply_barcode_image}`;
-        
-        // Создаем изображение из URL или base64 (в зависимости от формата)
-        const img = new Image();
-        img.crossOrigin = 'Anonymous'; // Разрешаем кросс-доменные запросы
-        img.src = barcodeUrl; 
-        
-        // Ждем загрузки изображения
-        await new Promise<void>((resolve, reject) => {
-          img.onload = () => resolve();
-          img.onerror = (error) => reject(error);
-          // Добавляем таймаут для загрузки изображения
-          setTimeout(() => reject(new Error('Таймаут загрузки изображения')), 10000);
+        const pdfDoc = new jsPDF({
+          orientation: 'landscape',
+          unit: 'mm',
+          format: [PDF_WIDTH, PDF_HEIGHT]
         });
         
         // Добавляем штрих-код на страницу
-          pdfDoc.addImage(
-            img, 
+        pdfDoc.addImage(
+          imgBase64, 
           'JPEG', 
-            0, // x - начинаем с левого края
-            0, // y - начинаем с верхнего края
+          0, // x - начинаем с левого края
+          0, // y - начинаем с верхнего края
           PDF_WIDTH, // используем всю ширину
           PDF_HEIGHT // используем всю высоту
-          );
-          
+        );
+        
         // Если есть текст штрих-кода, добавляем его внизу
         if (order.supply_barcode_text) {
           pdfDoc.setFontSize(8);
@@ -821,7 +838,7 @@ export const generateOzonSupplyStickersPDF = async (orders: OzonOrder[]) => {
     const fileName = `Ozon_Supply_Barcodes_${timestamp}.pdf`;
     downloadBlob(mergedPdfBlob, fileName);
     
-    console.log(`PDF со штрих-кодами поставок Ozon сгенерирован: ${blobsArray.length} штрих-кодов`);
+    console.log(`PDF со штрих-кодами поставок Ozon сгенерирован: ${blobsArray.length} уникальных штрих-кодов`);
   } catch (error) {
     console.error('Ошибка при генерации PDF со штрих-кодами поставок Ozon:', error);
     // Не показываем alert, т.к. это необязательная опция
@@ -830,67 +847,103 @@ export const generateOzonSupplyStickersPDF = async (orders: OzonOrder[]) => {
 
 /**
  * Генерация PDF с изображениями штрих-кодов поставок Ozon
- * Оптимизировано для правильного отображения штрих-кодов без искажений
  */
 export const generateOzonBarcodeImagesPDF = async (orders: OzonOrder[]) => {
   try {
-    // Отбираем только заказы с изображениями штрих-кодов поставок
-    const ordersWithImages = orders.filter(order => order.supply_barcode_image);
+    // Отбираем только заказы со штрих-кодами поставок
+    const ordersWithBarcodes = orders.filter(order => 
+      order.supply_barcode_image && order.supply_barcode_text
+    );
     
-    if (ordersWithImages.length === 0) {
-      console.log('Нет заказов Ozon с изображениями штрих-кодов поставок');
-      return; // Тихо возвращаемся, без уведомления
+    if (ordersWithBarcodes.length === 0) {
+      console.log('Нет заказов Ozon со штрих-кодами поставок');
+      return;
     }
     
+    // Дедупликация по supply_barcode_text (штрих-код поставки)
+    const uniqueOrders = new Map<string, OzonOrder>();
+    
+    // Группируем по supply_barcode_text
+    for (const order of ordersWithBarcodes) {
+      if (!order.supply_barcode_text) continue;
+      
+      // Используем supply_barcode_text как уникальный ключ
+      // Удаляем пробелы и переносы для нормализации ключа
+      const key = order.supply_barcode_text.replace(/\s+/g, '');
+      
+      // Сохраняем заказ, если уникальный supply_barcode_text
+      if (!uniqueOrders.has(key)) {
+        uniqueOrders.set(key, order);
+      }
+    }
+    
+    const deduplicatedOrders = Array.from(uniqueOrders.values());
+    console.log(`Найдено ${ordersWithBarcodes.length} заказов со штрих-кодами, после дедупликации: ${deduplicatedOrders.length}`);
+    
+    // Настройка PDF - сетка изображений
+    const pdfArray: Blob[] = [];
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `Ozon_Barcode_Images_${timestamp}.pdf`;
     
-    // Создаем массив для хранения отдельных PDF
-    const pdfArray: Blob[] = [];
-    
-    // Обрабатываем каждый заказ отдельно
-    for (const order of ordersWithImages) {
-      if (!order.supply_barcode_image) continue;
-      
+    // Для каждого уникального штрих-кода создаем изображение
+    const processOrder = async (order: OzonOrder) => {
       try {
-        // Полный URL для изображения штрих-кода
-        const imageUrl = `http://62.113.44.196:8080${order.supply_barcode_image}`;
+        // Пропускаем заказы без штрих-кода
+        if (!order.supply_barcode_image || !order.supply_barcode_text) {
+          return null;
+        }
         
-        // Создаем документ со специальными размерами для штрих-кодов
-        // Стандартные штрих-коды обычно имеют соотношение сторон ~2.5:1 (ширина:высота)
-        const doc = new jsPDF({
-          orientation: 'landscape', // Штрих-коды всегда горизонтальные
-          unit: 'mm',
-          format: [110, 50], // Типичный размер для штрих-кода (~11x5 см)
-          compress: true
-        });
+        // Загружаем изображение штрих-кода
+        const imgUrl = `http://62.113.44.196:8080${order.supply_barcode_image}`;
+        const imgResponse = await fetch(imgUrl);
+        if (!imgResponse.ok) return null;
         
-        // Добавляем изображение на всю страницу с небольшими полями
-        // Используем 90% ширины и высоты страницы
-        const pageWidth = 110;
-        const pageHeight = 50;
-        const margin = 5; // 5мм поля со всех сторон
+        // Конвертируем изображение в формат, подходящий для jsPDF
+        const imgBlob = await imgResponse.blob();
+        const imgBase64 = await blobToBase64(imgBlob);
         
-        const imgWidth = pageWidth - (margin * 2);
-        const imgHeight = pageHeight - (margin * 2);
+        // Создаем PDF для изображения
+        const pdf = new jsPDF();
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
         
-        // Центрируем изображение на странице
-        doc.addImage(
-          imageUrl, 
-          'PNG',
-          margin,
-          margin,
-          imgWidth,
-          imgHeight
-        );
+        // Настраиваем размер изображения
+        const imageWidth = pageWidth - 20; // отступы слева и справа
+        const imageHeight = 100; // высота изображения
         
-        // Сохраняем PDF как Blob
-        const pdfBlob = doc.output('blob');
-        pdfArray.push(pdfBlob);
+        // Позиция изображения
+        const imageX = 10; // отступ слева
+        const imageY = 30; // отступ сверху
         
+        // Добавляем название
+        pdf.setFontSize(16);
+        pdf.text('Штрих-код поставки Ozon', pageWidth / 2, 15, { align: 'center' });
+        
+        // Добавляем изображение
+        pdf.addImage(imgBase64, 'JPEG', imageX, imageY, imageWidth, imageHeight);
+        
+        // Добавляем текст штрих-кода
+        pdf.setFontSize(12);
+        pdf.text(`Код: ${order.supply_barcode_text}`, pageWidth / 2, imageY + imageHeight + 10, { align: 'center' });
+        
+        if (order.order_id) {
+          pdf.setFontSize(10);
+          pdf.text(`Заказ: ${order.order_id}`, pageWidth / 2, imageY + imageHeight + 20, { align: 'center' });
+        }
+        
+        // Возвращаем blob PDF
+        return pdf.output('blob');
       } catch (error) {
-        console.error(`Ошибка при создании PDF для заказа ${order.order_id}:`, error);
-        // В случае ошибки пропускаем текущий заказ и продолжаем с следующим
+        console.error(`Ошибка при создании изображения для заказа ${order.order_id}:`, error);
+        return null;
+      }
+    };
+    
+    // Обрабатываем все штрих-коды последовательно
+    for (const order of deduplicatedOrders) {
+      const blob = await processOrder(order);
+      if (blob) {
+        pdfArray.push(blob);
       }
     }
     
@@ -927,14 +980,14 @@ export const generateOzonBarcodeImagesPDF = async (orders: OzonOrder[]) => {
       // Скачиваем созданный PDF
       downloadBlob(mergedPdfBlob, filename);
       
-      console.log(`PDF с изображениями штрих-кодов поставок Ozon сгенерирован: ${pdfArray.length} страниц`);
+      console.log(`PDF с изображениями штрих-кодов поставок Ozon сгенерирован: ${pdfArray.length} уникальных штрих-кодов`);
     } catch (error) {
       console.error('Ошибка при объединении PDF с изображениями штрих-кодов:', error);
       alert(`Ошибка при объединении PDF: ${error instanceof Error ? error.message : 'неизвестная ошибка'}`);
     }
   } catch (error) {
     console.error('Ошибка при генерации PDF с изображениями штрих-кодов поставок Ozon:', error);
-    alert(`Не удалось создать PDF с изображениями: ${error instanceof Error ? error.message : 'неизвестная ошибка'}`);
+    alert(`Ошибка: ${error instanceof Error ? error.message : 'неизвестная ошибка'}`);
   }
 };
 
@@ -1186,14 +1239,15 @@ export const generateYandexStickersPDF = async (orders: YandexMarketOrder[]) => 
     // Получаем URLs стикеров
     const stickerUrls = ordersWithStickers.map(order => `http://62.113.44.196:8080${order.sticker_pdf}`);
     
-    // Объединяем PDF-файлы стикеров
+    // Объединяем PDF-файлы стикеров с дедупликацией
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const fileName = `Yandex_Stickers_${timestamp}.pdf`;
     
-    const mergedPdfBlob = await mergePDFsInOrder(stickerUrls);
+    const mergedPdfBlob = await mergePDFsWithoutDuplicates(stickerUrls);
     downloadBlob(mergedPdfBlob, fileName);
     
-    console.log(`PDF со стикерами Яндекс Маркет сгенерирован: ${ordersWithStickers.length} стикеров`);
+    console.log(`PDF со стикерами Яндекс Маркет сгенерирован (устранены дубликаты)`);
+    alert(`PDF со стикерами Яндекс Маркет успешно сгенерирован (устранены дубликаты)`);
   } catch (error) {
     console.error('Ошибка при генерации PDF со стикерами Яндекс Маркет:', error);
     alert(`Ошибка при генерации стикеров Яндекс Маркет: ${error instanceof Error ? error.message : String(error)}`);
@@ -1214,12 +1268,52 @@ export const generateWbMergedStickersPDF = async (orders: WbOrder[]) => {
       return;
     }
     
+    // Дедупликация по supply_id или по содержимому supply_barcode
+    const uniqueOrders = new Map<string, WbOrder>();
+    const processedBarcodes = new Set<string>();
+    
+    // Первый проход - группируем по supply_id
+    for (const order of ordersWithStickers) {
+      if (!order.supply_id || !order.supply_barcode || !isBase64Image(order.supply_barcode)) continue;
+      
+      // Используем supply_id как уникальный ключ
+      const key = order.supply_id.toString();
+      
+      // Сохраняем заказ, если уникальный supply_id
+      if (!uniqueOrders.has(key)) {
+        uniqueOrders.set(key, order);
+      }
+    }
+    
+    // Если после группировки по supply_id нет заказов, дополнительно проверяем уникальность по supply_barcode
+    if (uniqueOrders.size === 0) {
+      console.log('Нет уникальных supply_id, проверяем уникальность по supply_barcode');
+      for (const order of ordersWithStickers) {
+        if (!order.supply_barcode || !isBase64Image(order.supply_barcode)) continue;
+        
+        // Создаем простой хэш содержимого barcode
+        // Берем первые 100 символов из base64
+        const barcodeHash = order.supply_barcode.substring(0, 100);
+        
+        // Если такой штрих-код еще не обрабатывали
+        if (!processedBarcodes.has(barcodeHash)) {
+          processedBarcodes.add(barcodeHash);
+          // Используем index как ключ (поскольку нет уникального supply_id)
+          uniqueOrders.set(`barcode_${processedBarcodes.size}`, order);
+        }
+      }
+    }
+    
+    const deduplicatedOrders = Array.from(uniqueOrders.values());
+    
+    console.log(`Найдено ${ordersWithStickers.length} заказов со штрих-кодами, после дедупликации: ${deduplicatedOrders.length}`);
+    
     // Создаем временную папку для хранения отдельных PDF
     const blobsArray: Blob[] = [];
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     
-    // Для каждого штрих-кода создаем отдельный PDF с правильным размером
-    for (const order of ordersWithStickers) {
+    // Для каждого уникального штрих-кода создаем отдельный PDF с правильным размером
+    for (const order of deduplicatedOrders) {
       // Пропускаем заказы без штрих-кода
       if (!order.supply_barcode || !isBase64Image(order.supply_barcode)) {
         continue;
@@ -1250,6 +1344,18 @@ export const generateWbMergedStickersPDF = async (orders: WbOrder[]) => {
           PDF_WIDTH, // используем всю ширину
           PDF_HEIGHT // используем всю высоту
         );
+        
+        // Добавляем supply_id внизу страницы, если есть
+        if (order.supply_id) {
+          pdfDoc.setFontSize(8);
+          pdfDoc.setTextColor(0, 0, 0);
+          pdfDoc.text(
+            `Поставка: ${order.supply_id}`,
+            PDF_WIDTH / 2,
+            PDF_HEIGHT - 2,
+            { align: 'center' }
+          );
+        }
         
         // Конвертируем PDF в Blob
         const pdfBlob = pdfDoc.output('blob');
@@ -1293,8 +1399,8 @@ export const generateWbMergedStickersPDF = async (orders: WbOrder[]) => {
     const fileName = `WB_Supply_Stickers_Combined_${timestamp}.pdf`;
     downloadBlob(mergedPdfBlob, fileName);
     
-    console.log(`PDF с объединенными штрих-кодами Wildberries сгенерирован: ${blobsArray.length} штрих-кодов`);
-    alert(`Объединенный PDF с ${blobsArray.length} штрих-кодами поставок Wildberries сгенерирован`);
+    console.log(`PDF с объединенными штрих-кодами Wildberries сгенерирован: ${blobsArray.length} уникальных штрих-кодов`);
+    alert(`Объединенный PDF с ${blobsArray.length} уникальными штрих-кодами поставок Wildberries сгенерирован`);
   } catch (error) {
     console.error('Ошибка при генерации PDF с объединенными штрих-кодами Wildberries:', error);
     alert(`Ошибка при генерации PDF с объединенными штрих-кодами Wildberries: ${error instanceof Error ? error.message : String(error)}`);

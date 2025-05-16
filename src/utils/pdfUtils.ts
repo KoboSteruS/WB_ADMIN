@@ -327,6 +327,98 @@ export async function mergePDFsInOrder(urlsInOrder: string[]): Promise<Blob> {
 }
 
 /**
+ * Объединяет несколько PDF файлов в один по указанным URL с дедупликацией
+ * @param urlsInOrder - массив URL PDF-файлов, которые нужно объединить в указанном порядке
+ * @returns Blob с объединенным PDF-файлом
+ */
+export async function mergePDFsWithoutDuplicates(urlsInOrder: string[]): Promise<Blob> {
+  try {
+    // Импортируем pdf-lib динамически
+    const pdfLib = await import('pdf-lib');
+    const PDFDocument = pdfLib.PDFDocument;
+    
+    const mergedPdf = await PDFDocument.create();
+    // Set для хранения уже обработанных URL
+    const processedUrls = new Set<string>();
+    // Map для хранения хэшей содержимого PDF для более продвинутой дедупликации
+    const contentHashes = new Map<string, boolean>();
+
+    for (const url of urlsInOrder) {
+      try {
+        // Пропускаем пустые URL
+        if (!url) continue;
+        
+        // Нормализуем URL для сравнения
+        const normalizedUrl = url.trim();
+        
+        // Добавляем префикс к URL, если он не начинается с http
+        const fullUrl = normalizedUrl.startsWith('http') ? normalizedUrl : `http://62.113.44.196:8080${normalizedUrl}`;
+        
+        // Пропускаем, если URL уже был обработан
+        if (processedUrls.has(fullUrl)) {
+          console.log(`Пропуск дубликата URL: ${fullUrl}`);
+          continue;
+        }
+        
+        // Добавляем URL в список обработанных
+        processedUrls.add(fullUrl);
+        
+        // Загружаем PDF по URL
+        const existingPdfBytes = await fetch(fullUrl).then(res => {
+          if (!res.ok) {
+            throw new Error(`Ошибка загрузки PDF: ${res.status} ${res.statusText}`);
+          }
+          return res.arrayBuffer();
+        });
+        
+        // Создаем простой хэш содержимого PDF для сравнения
+        // Используем первые 1000 байт как "отпечаток"
+        const byteArray = new Uint8Array(existingPdfBytes);
+        const contentFingerprint = Array.from(byteArray.slice(0, 1000))
+          .map(byte => byte.toString(16).padStart(2, '0'))
+          .join('');
+        
+        // Проверяем, не встречался ли уже такой хэш содержимого
+        if (contentHashes.has(contentFingerprint)) {
+          console.log(`Пропуск файла с идентичным содержимым: ${fullUrl}`);
+          continue;
+        }
+        
+        // Сохраняем хэш содержимого
+        contentHashes.set(contentFingerprint, true);
+        
+        // Загружаем PDF документ
+        const pdf = await PDFDocument.load(existingPdfBytes);
+        
+        // Копируем все страницы из исходного документа
+        const pageCount = pdf.getPageCount();
+        if (pageCount > 0) {
+          const pageIndices = Array.from({ length: pageCount }, (_, i) => i);
+          const pages = await mergedPdf.copyPages(pdf, pageIndices);
+          
+          // Добавляем все страницы в объединенный документ
+          pages.forEach((page: any) => {
+            mergedPdf.addPage(page);
+          });
+        }
+      } catch (error) {
+        console.error(`Ошибка при обработке PDF по URL ${url}:`, error);
+        // Продолжаем с следующим URL, даже если текущий вызвал ошибку
+      }
+    }
+
+    // Сохраняем объединенный PDF
+    const mergedBytes = await mergedPdf.save();
+    
+    // Возвращаем как Blob
+    return new Blob([mergedBytes], { type: 'application/pdf' });
+  } catch (error) {
+    console.error('Ошибка при объединении PDF файлов:', error);
+    throw error;
+  }
+}
+
+/**
  * Скачивает Blob как файл с указанным именем
  * @param blob - Blob для скачивания
  * @param fileName - имя файла для скачивания
@@ -344,4 +436,26 @@ export function downloadBlob(blob: Blob, fileName: string): void {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }, 100);
+}
+
+/**
+ * Преобразует Blob в строку base64
+ * @param blob - исходный Blob для преобразования
+ * @returns Promise со строкой base64
+ */
+export function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+      } else {
+        reject(new Error('Ошибка при конвертации Blob в base64'));
+      }
+    };
+    reader.onerror = () => {
+      reject(new Error('Ошибка при чтении Blob'));
+    };
+    reader.readAsDataURL(blob);
+  });
 } 

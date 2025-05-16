@@ -12,6 +12,33 @@ export const formatDate = (dateString?: string): string => {
   if (!dateString) return '—';
   
   try {
+    // Проверка на формат "DD-MM-YYYY HH:MM:SS" (Яндекс Маркет)
+    if (dateString.includes('-') && dateString.includes(':')) {
+      const dateParts = dateString.split(' ')[0].split('-');
+      // Если первая часть - день (2 цифры)
+      if (dateParts.length === 3 && dateParts[0].length === 2 && dateParts[1].length === 2 && dateParts[2].length === 4) {
+        const [day, month, year] = dateParts;
+        const timePart = dateString.split(' ')[1] || '00:00:00';
+        
+        // Создаем объект Date в правильном формате (YYYY-MM-DD)
+        const dateObj = new Date(`${year}-${month}-${day}T${timePart}`);
+        
+        // Форматируем дату и время
+        const formattedDate = dateObj.toLocaleDateString('ru-RU', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric'
+        });
+        
+        const hours = dateObj.getHours();
+        const minutes = dateObj.getMinutes();
+        const formattedTime = `${hours < 10 ? '0' + hours : hours}:${minutes < 10 ? '0' + minutes : minutes}`;
+        
+        return `${formattedDate} ${formattedTime}`;
+      }
+    }
+    
+    // Стандартная обработка для ISO формата
     const date = new Date(dateString);
     
     // Формат даты ДД.ММ.ГГГГ
@@ -29,6 +56,7 @@ export const formatDate = (dateString?: string): string => {
     // Объединяем дату и время
     return `${formattedDate} ${formattedTime}`;
   } catch (e) {
+    console.error('Ошибка при форматировании даты:', e, dateString);
     return dateString;
   }
 };
