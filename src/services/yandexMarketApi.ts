@@ -254,4 +254,44 @@ export const addYandexMarketToken = async (request: AddTokenRequest): Promise<an
     console.log('Эмулируем успешный ответ:', response);
     return response;
   }
+};
+
+/**
+ * Подтверждение поставки Яндекс Маркет
+ * @param supplyId ID поставки для подтверждения
+ * @param yandexMarketTokenId ID токена Яндекс Маркет
+ * @returns Ответ от API
+ */
+export const confirmShipment = async (supplyId: number, yandexMarketTokenId: number): Promise<any> => {
+  const apiUrl = `${API_BASE_URL}/yandex-market-orders/confirm-shipment/?yandex_market_token_id=${yandexMarketTokenId}`;
+  
+  console.log('Запрос на подтверждение поставки Яндекс Маркет:', { supplyId, yandexMarketTokenId });
+  
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': API_TOKEN,
+        'accept': 'application/json',
+        'X-CSRFTOKEN': CSRF_TOKEN,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(supplyId)
+    });
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(`Ошибка HTTP: ${response.status} ${response.statusText}. ${text}`);
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      console.log('Ответ от сервера (ТЕКСТ):', text);
+      return { response: text };
+    }
+  } catch (error) {
+    console.error('Ошибка при подтверждении поставки:', error);
+    throw new Error('Ошибка при подтверждении поставки Яндекс Маркет. Подробности в консоли.');
+  }
 }; 

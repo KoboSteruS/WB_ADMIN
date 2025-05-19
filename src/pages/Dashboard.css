@@ -96,4 +96,46 @@
 .table-responsive table {
   width: 100% !important;
   margin-bottom: 0;
-} 
+}
+
+/* Стили для разворачивающихся строк в таблице заказов */
+.details-row {
+  background-color: #f9f9f9;
+  box-shadow: inset 0 3px 6px -3px rgba(0,0,0,0.1);
+}
+
+.details-row td {
+  padding: 0;
+}
+
+.details-row .table {
+  margin-bottom: 0;
+  border: none;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+/* Стили для таблицы заказов */
+.table-secondary {
+  background-color: #f1f1f1;
+}
+
+.table-sm td, .table-sm th {
+  padding: 0.4rem;
+}
+
+/* Стиль для строки с итогами */
+tr.table-secondary td, 
+tr.table-secondary.fw-bold td {
+  font-weight: 500;
+  background-color: #e9e9e9 !important;
+}
+
+/* Стиль для строк с несколькими товарами */
+tr[rowspan] {
+  background-color: rgba(240, 249, 255, 0.2);
+}
+
+/* Стили для ячеек с ценами и суммами (выравнивание по правому краю) */
+td.text-end, th.text-end {
+  text-align: right;
+}

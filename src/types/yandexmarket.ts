@@ -112,6 +112,8 @@ export interface YandexMarketOrder {
   
   // Дополнительные свойства
   yandex_market_token?: number;
+  supply_id?: string | number; // Идентификатор поставки
+  supply_reception_transfer_act?: string; // URL документа отгрузки
   [key: string]: any;
 }
 

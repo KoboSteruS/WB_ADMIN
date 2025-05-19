@@ -435,9 +435,9 @@ export const generateOzonSupplyStickersPDF = async (orders: OzonOrder[]) => {
         const PDF_HEIGHT = 50; // высота в мм
         
         // Создаем PDF документ с заданным размером
-        const pdfDoc = new jsPDF({
-          orientation: 'landscape',
-          unit: 'mm',
+    const pdfDoc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
           format: [PDF_WIDTH, PDF_HEIGHT]
         });
         
@@ -531,7 +531,7 @@ export const generateYandexReportsPDF = async (
     
     console.log('Все PDF-файлы для Яндекс Маркет успешно сгенерированы');
     alert('PDF-файлы для Яндекс Маркет успешно сгенерированы и сохранены');
-  } catch (error) {
+        } catch (error) {
     console.error('Ошибка при генерации PDF для Яндекс Маркет:', error);
     alert(`Произошла ошибка при генерации PDF: ${error instanceof Error ? (error as Error).message : String(error)}`);
   }
@@ -843,18 +843,18 @@ export const generateWbMergedStickersPDF = async (orders: WbOrder[]) => {
       }
       
       try {
-        // Точные размеры стикера
-        const PDF_WIDTH = 58; // ширина стикера в мм
-        const PDF_HEIGHT = 40; // высота стикера в мм
-        
-        // Создаем PDF документ с заданным размером
-        const pdfDoc = new jsPDF({
-          orientation: 'landscape',
-          unit: 'mm',
-          format: [PDF_WIDTH, PDF_HEIGHT], // Точный размер стикера
-          hotfixes: ['px_scaling'] // Исправление для масштабирования пикселей
-        });
-        
+    // Точные размеры стикера
+    const PDF_WIDTH = 58; // ширина стикера в мм
+    const PDF_HEIGHT = 40; // высота стикера в мм
+    
+    // Создаем PDF документ с заданным размером
+    const pdfDoc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: [PDF_WIDTH, PDF_HEIGHT], // Точный размер стикера
+      hotfixes: ['px_scaling'] // Исправление для масштабирования пикселей
+    });
+    
         // Преобразуем base64 в данные для jsPDF
         const imageData = getImageSrcFromBase64(order.supply_barcode);
         
@@ -957,12 +957,12 @@ export const generateSupplyBarcodePDF = async (supply_barcode: string, supply_id
     const imageData = getImageSrcFromBase64(supply_barcode);
     
     // Добавляем штрих-код на страницу
-    pdfDoc.addImage(
+      pdfDoc.addImage(
       imageData, 
-      'PNG', 
-      0, // x - начинаем с левого края
-      0, // y - начинаем с верхнего края
-      PDF_WIDTH, // используем всю ширину
+        'PNG', 
+        0, // x - начинаем с левого края
+        0, // y - начинаем с верхнего края
+        PDF_WIDTH, // используем всю ширину
       PDF_HEIGHT * 0.9 // используем 90% высоты
     );
     
@@ -1100,8 +1100,8 @@ export const generateOzonReportsPDF = async (
         10  // Доставка
       ]
     });
-    
-    // Сохраняем PDF
+      
+      // Сохраняем PDF
     const filename = `Ozon_Orders_List_${timestamp}.pdf`;
     doc.save(filename);
     console.log('PDF со списком заказов Ozon сгенерирован');
@@ -1120,7 +1120,7 @@ export const generateOzonReportsPDF = async (
         downloadBlob(mergedPdfBlob, stickerFileName);
         
         console.log(`PDF со стикерами Ozon сгенерирован (устранены дубликаты)`);
-      } catch (error) {
+    } catch (error) {
         console.error('Ошибка при генерации PDF со стикерами Ozon:', error);
       }
     }

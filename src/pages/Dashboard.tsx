@@ -10,7 +10,7 @@ import Form from 'react-bootstrap/Form';
 
 // Импорт компонентов и хуков для работы с заказами маркетплейсов
 import { WbOrder } from '../types/wildberries';
-import { OzonOrder } from '../types/ozon';
+import { OzonOrder, OzonOrderProduct } from '../types/ozon';
 import { YandexMarketOrder } from '../types/yandexmarket';
 import { 
   fetchWbOrders, 
@@ -27,11 +27,16 @@ import {
 import { 
   fetchYandexMarketOrders, 
   changeOrderStatus as changeYandexOrderStatus, 
-  addYandexMarketToken 
+  addYandexMarketToken,
+  confirmShipment as confirmYandexMarketShipment
 } from '../services/yandexMarketApi';
 import { formatDate, formatPrice } from '../utils/orderUtils';
 import { getBadgeColor, getStatusText } from '../utils/statusHelpers';
 import { mergePDFsInOrder, downloadBlob, mergePDFsWithoutDuplicates } from '../utils/pdfUtils';
+
+// Импорт модального окна для отображения деталей заказа
+import { OrderDetailsModal, OrderItemDetail } from '../components/modals/shared';
+import { orderDetailsService } from '../services/orderDetailsService';
 
 // Импортируем сервис генерации PDF
 import { 
@@ -72,6 +77,20 @@ const Dashboard: React.FC = () => {
   // Состояния для работы с заказами маркетплейсов
   const [selectedMarketplace, setSelectedMarketplace] = useState<string | null>(null);
   const [selectedLegalEntity, setSelectedLegalEntity] = useState<LegalEntity | null>(null);
+  
+  // Состояния для модального окна деталей заказа
+  const [showOrderDetailsModal, setShowOrderDetailsModal] = useState<boolean>(false);
+  const [orderDetailsData, setOrderDetailsData] = useState<{
+    orderId: string;
+    orderItems: OrderItemDetail[];
+    totalQuantity: number;
+    totalSum: number;
+  }>({
+    orderId: '',
+    orderItems: [],
+    totalQuantity: 0,
+    totalSum: 0
+  });
   
   // Состояния для Wildberries
   const [wbOrders, setWbOrders] = useState<WbOrder[]>([]);
@@ -625,8 +644,8 @@ const Dashboard: React.FC = () => {
     console.log('Генерация отчетов для заказов:', sortedByNmId);
     
     try {
-                      // Шаг 1: Генерируем сводку по артикулам в Excel
-                console.log('Генерация Excel: Сводка по артикулам');
+      // Шаг 1: Генерируем сводку по артикулам в Excel
+      console.log('Генерация Excel: Сводка по артикулам');
                 generateArticlesSummaryExcel(sortedByNmId, selectedLegalEntity ?? undefined);
       
       // Шаг 2: Генерируем PDF со списком всех заказов
@@ -1070,6 +1089,55 @@ const Dashboard: React.FC = () => {
   };
 
   /**
+   * Обработчик подтверждения поставки Яндекс Маркет
+   * @param order Заказ Яндекс Маркет с ID поставки
+   */
+  const handleConfirmYandexShipment = async (order: YandexMarketOrder) => {
+    if (!order || !order.supply_id) {
+      alert('Не указан ID поставки для подтверждения');
+      return;
+    }
+
+    const supplyId = Number(order.supply_id);
+    
+    // Берем ID токена из заказа или используем значение по умолчанию
+    const yandexMarketTokenId = order.yandex_market_token || 1;
+    
+    setStatusChangeLoading(true);
+    setStatusChangeMessage(`Подтверждение поставки ${supplyId}...`);
+    setStatusChangeError(null);
+    setStatusChangeSuccess(false);
+
+    try {
+      // Вызываем API для подтверждения поставки
+      const result = await confirmYandexMarketShipment(supplyId, yandexMarketTokenId);
+      
+      console.log('Результат подтверждения поставки:', result);
+      
+      if (result.response === 'ok') {
+        setStatusChangeSuccess(true);
+        alert(`Поставка ${supplyId} успешно подтверждена`);
+        
+        // Обновляем данные заказов, чтобы получить ссылку на акт приема-передачи
+        setTimeout(() => {
+          if (selectedLegalEntity) {
+            loadYandexMarketOrders(selectedLegalEntity);
+          }
+        }, 1500);
+      } else {
+        throw new Error('Неожиданный ответ от сервера');
+      }
+    } catch (error) {
+      console.error('Ошибка при подтверждении поставки:', error);
+      setStatusChangeError(`Ошибка при подтверждении поставки: ${error instanceof Error ? error.message : String(error)}`);
+      alert(`Не удалось подтвердить поставку: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setStatusChangeLoading(false);
+      setStatusChangeMessage(null);
+    }
+  };
+
+  /**
    * Обработчик сортировки заказов Wildberries
    */
   const handleWbSort = (column: string) => {
@@ -1162,7 +1230,7 @@ const Dashboard: React.FC = () => {
       }
     });
   };
-  
+
   /**
    * Функция для получения отсортированных заказов Yandex Market с удалением дубликатов
    */
@@ -1252,6 +1320,9 @@ const Dashboard: React.FC = () => {
       } else if (ymSortColumn === 'region') {
         valueA = a.region || a.delivery_region || '';
         valueB = b.region || b.delivery_region || '';
+      } else if (ymSortColumn === 'supply_id') {
+        valueA = a.supply_id || '';
+        valueB = b.supply_id || '';
       } else {
         // Для остальных полей
         valueA = a[ymSortColumn as keyof YandexMarketOrder];
@@ -1967,6 +2038,24 @@ const Dashboard: React.FC = () => {
       />
     );
   };
+  
+  /**
+   * Обработчик для отображения модального окна с деталями заказа Wildberries
+   */
+  const handleShowWbOrderDetails = (order: WbOrder) => {
+    const orderDetails = orderDetailsService.transformWbOrderToDetails(order);
+    setOrderDetailsData(orderDetails);
+    setShowOrderDetailsModal(true);
+  };
+  
+  /**
+   * Обработчик для отображения модального окна с деталями заказа Ozon
+   */
+  const handleShowOzonOrderDetails = (order: OzonOrder) => {
+    const orderDetails = orderDetailsService.transformOzonOrderToDetails(order);
+    setOrderDetailsData(orderDetails);
+    setShowOrderDetailsModal(true);
+  };
 
   /**
    * Обработчик выделения всех заказов Wildberries (не только на текущей странице)
@@ -2398,8 +2487,77 @@ const Dashboard: React.FC = () => {
     });
   };
 
+  /**
+   * Компонент для отображения товаров в заказе Ozon
+   */
+  const OzonProductsList = ({ products, productName, sku, price }: { 
+    products?: OzonOrderProduct[]; 
+    productName?: string; 
+    sku?: string | number; 
+    price?: string | number;
+  }) => {
+    // Если нет массива products или он пустой, отображаем одиночный товар из основных полей заказа
+    if (!products || products.length === 0) {
+      return (
+        <div>
+          <div className="fw-medium">{productName || '—'}</div>
+          <div className="small text-muted">Артикул: {sku || '—'}</div>
+          {price && <div className="small">Цена: {formatPrice(price)}</div>}
+        </div>
+      );
+    }
+
+    // Если в заказе только один товар, отображаем его
+    if (products.length === 1) {
+      const product = products[0];
+      return (
+        <div>
+          <div className="fw-medium">{product.name || productName || '—'}</div>
+          <div className="small text-muted">Артикул: {product.sku || sku || '—'}</div>
+          {product.price && <div className="small">Цена: {formatPrice(product.price)}</div>}
+        </div>
+      );
+    }
+
+    // Если в заказе несколько товаров, отображаем их списком
+    return (
+      <div>
+        <div className="fw-bold mb-1">
+          Товаров в заказе: {products.length}
+        </div>
+        {products.map((product, idx) => (
+          <div key={idx} className={idx < products.length - 1 ? "mb-2 pb-2 border-bottom" : ""}>
+            <div className={idx === 0 ? "fw-medium" : ""}>
+              {product.name || '—'}
+            </div>
+            <div className="d-flex justify-content-between align-items-center small">
+              <span className="text-muted">Артикул: {product.sku || '—'}</span>
+              <span className="badge bg-secondary ms-1">
+                {product.quantity || 1} шт. × {formatPrice(product.price)}
+              </span>
+            </div>
+          </div>
+        ))}
+        <div className="fw-bold mt-1 text-end">
+          Итого: {formatPrice(products.reduce((sum: number, p: OzonOrderProduct) => sum + (p.price || 0) * (p.quantity || 1), 0))}
+        </div>
+      </div>
+    );
+  };
+
+
+
   return (
     <Container fluid className="dashboard-container">
+      {/* Модальное окно с деталями заказа */}
+      <OrderDetailsModal
+        show={showOrderDetailsModal}
+        onHide={() => setShowOrderDetailsModal(false)}
+        orderId={orderDetailsData.orderId}
+        orderItems={orderDetailsData.orderItems}
+        totalQuantity={orderDetailsData.totalQuantity}
+        totalSum={orderDetailsData.totalSum}
+      />
 
       <Row className="mb-4">
         <Col>
@@ -2684,6 +2842,7 @@ const Dashboard: React.FC = () => {
                           />
                           <th>Часть А</th>
                           <th>Часть В</th>
+                          <th>Действия</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -2731,6 +2890,16 @@ const Dashboard: React.FC = () => {
                             <td>{formatPrice(order.sale_price)}</td>
                             <td>{order.part_a || '—'}</td>
                             <td>{order.part_b || '—'}</td>
+                            <td>
+                              <Button
+                                variant="outline-primary"
+                                size="sm"
+                                onClick={() => handleShowWbOrderDetails(order)}
+                                title="Просмотр деталей"
+                              >
+                                <i className="bi bi-eye"></i>
+                              </Button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -2951,7 +3120,7 @@ const Dashboard: React.FC = () => {
                           />
                           <SortableColumnHeader
                             column="products.name"
-                            title="Название товара"
+                            title="Товары"
                             currentSortColumn={ozonSortColumn}
                             currentSortDirection={ozonSortDirection}
                             onSort={handleOzonSort}
@@ -3006,66 +3175,176 @@ const Dashboard: React.FC = () => {
                             onSort={handleOzonSort}
                           />
                           <th>Стикер</th>
+                          <th>Действия</th>
                         </tr>
                       </thead>
-                      <tbody>
-                        {getCurrentPageOzonOrders().map((order, index) => (
-                            <tr key={getRowKey(order, 'ozon', index)}>
-                            <td>
-                              <Form.Check
-                                type="checkbox"
-                                      checked={selectedOzonOrders.has(order.id || order.order_id || '')}
-                                      onChange={() => handleSelectOzonOrder(order.id || order.order_id || '')}
-                                      aria-label={`Выбрать заказ ${order.id || order.order_id || ''}`}
-                              />
-                            </td>
-                                  <td>{order.posting_number || '—'}</td>
-                            <td>{order.order_id || '—'}</td>
-                            <td>{formatDate(order.in_process_at || order.created_at || order.created_date)}</td>
-                                  <td>{order.products?.[0]?.name || order.product_name || order.name || '—'}</td>
-                                  <td>{order.products?.[0]?.sku || order.sku || order.offer_id || '—'}</td>
-                                  <td>{order.products?.[0]?.quantity || '—'}</td>
-                            <td>
-                              <Badge bg={getBadgeColor(order.status)}>
-                                {getStatusText(order.status)}
-                              </Badge>
-                            </td>
-                                  <td>{formatPrice(order.products?.[0]?.price || order.price || order.sale_price)}</td>
-                                  <td>{order.delivery_method?.warehouse || '—'}</td>
-                                  <td>{order.delivery_method?.name || '—'}</td>
-                                  <td>
-                                    {order.supply_barcode_text ? (
-                                      <div>
-                                        <span className="d-block mb-1" style={{ fontSize: '0.85em' }}>
-                                          {order.supply_barcode_text.replace("%960%", "")}
-                                        </span>
-                                        {order.supply_barcode_image && (
-                                          <Button 
-                                            variant="outline-secondary" 
-                                            size="sm"
-                                            onClick={() => window.open(`http://62.113.44.196:8080${order.supply_barcode_image}`, '_blank')}
-                                            title="Посмотреть штрих-код поставки"
-                                          >
-                                            <i className="bi bi-file-earmark-text"></i>
-                                          </Button>
-                                        )}
-                                      </div>
-                                    ) : '—'}
-                                  </td>
-                                  <td>
-                                    {order.sticker_pdf ? (
-                                      <Button 
-                                        variant="outline-primary" 
-                                        size="sm"
-                                        onClick={() => window.open(`http://62.113.44.196:8080${order.sticker_pdf}`, '_blank')}
-                                        title="Скачать стикер"
-                                      >
-                                        <i className="bi bi-download"></i>
-                                      </Button>
-                                    ) : '—'}
-                                  </td>
-                          </tr>
-                        ))}
+                                            <tbody>
+                        {getCurrentPageOzonOrders().map((order, index) => {
+                          const orderId = String(order.posting_number || order.order_id || index);
+                          const hasMultipleProducts = order.products && order.products.length > 1;
+                          
+                          // Если один товар, выводим его как обычно
+                          if (!hasMultipleProducts) {
+                            return (
+                              <tr key={getRowKey(order, 'ozon', index)}>
+                                <td>
+                                  <Form.Check
+                                    type="checkbox"
+                                    checked={selectedOzonOrders.has(order.id || order.order_id || '')}
+                                    onChange={() => handleSelectOzonOrder(order.id || order.order_id || '')}
+                                    aria-label={`Выбрать заказ ${order.id || order.order_id || ''}`}
+                                  />
+                                </td>
+                                <td>{order.posting_number || '—'}</td>
+                                <td>{order.order_id || '—'}</td>
+                                <td>{formatDate(order.in_process_at || order.created_at || order.created_date)}</td>
+                                <td>{order.products?.[0]?.name || order.product_name || order.name || '—'}</td>
+                                <td>{order.products?.[0]?.sku || order.sku || order.offer_id || '—'}</td>
+                                <td>{order.products?.[0]?.quantity || '—'}</td>
+                                <td>
+                                  <Badge bg={getBadgeColor(order.status)}>
+                                    {getStatusText(order.status)}
+                                  </Badge>
+                                </td>
+                                <td className="text-end">{formatPrice(order.products?.[0]?.price || order.price || order.sale_price || 0)}</td>
+                                <td>{order.delivery_method?.warehouse || '—'}</td>
+                                <td>{order.delivery_method?.name || '—'}</td>
+                                <td>
+                                  {order.supply_barcode_text ? (
+                                    <div>
+                                      <span className="d-block mb-1" style={{ fontSize: '0.85em' }}>
+                                        {order.supply_barcode_text.replace("%960%", "")}
+                                      </span>
+                                      {order.supply_barcode_image && (
+                                        <Button 
+                                          variant="outline-secondary" 
+                                          size="sm"
+                                          onClick={() => window.open(`http://62.113.44.196:8080${order.supply_barcode_image}`, '_blank')}
+                                          title="Посмотреть штрих-код поставки"
+                                        >
+                                          <i className="bi bi-file-earmark-text"></i>
+                                        </Button>
+                                      )}
+                                    </div>
+                                  ) : '—'}
+                                </td>
+                                <td>
+                                  {order.sticker_pdf ? (
+                                    <Button 
+                                      variant="outline-primary" 
+                                      size="sm"
+                                      onClick={() => window.open(`http://62.113.44.196:8080${order.sticker_pdf}`, '_blank')}
+                                      title="Скачать стикер"
+                                    >
+                                      <i className="bi bi-download"></i>
+                                    </Button>
+                                  ) : '—'}
+                                </td>
+                                <td>
+                                  <Button
+                                    variant="outline-info"
+                                    size="sm"
+                                    onClick={() => handleShowOzonOrderDetails(order)}
+                                    title="Просмотр деталей"
+                                  >
+                                    <i className="bi bi-eye"></i>
+                                  </Button>
+                                </td>
+                              </tr>
+                            );
+                          }
+                          
+                          // Если несколько товаров, то отображаем первый товар в основной строке
+                          return (
+                            <React.Fragment key={getRowKey(order, 'ozon', index)}>
+                              <tr>
+                                <td>
+                                  <Form.Check
+                                    type="checkbox"
+                                    checked={selectedOzonOrders.has(order.id || order.order_id || '')}
+                                    onChange={() => handleSelectOzonOrder(order.id || order.order_id || '')}
+                                    aria-label={`Выбрать заказ ${order.id || order.order_id || ''}`}
+                                  />
+                                </td>
+                                <td rowSpan={order.products?.length || 1}>{order.posting_number || '—'}</td>
+                                <td rowSpan={order.products?.length || 1}>{order.order_id || '—'}</td>
+                                <td rowSpan={order.products?.length || 1}>{formatDate(order.in_process_at || order.created_at || order.created_date)}</td>
+                                <td>
+                                  <div className="d-flex align-items-center">
+                                    <span>{order.products?.[0]?.name || '—'}</span>
+                                  </div>
+                                </td>
+                                <td>{order.products?.[0]?.sku || '—'}</td>
+                                <td className="text-center">{order.products?.[0]?.quantity || 1} шт.</td>
+                                <td rowSpan={order.products?.length || 1}>
+                                  <Badge bg={getBadgeColor(order.status)}>
+                                    {getStatusText(order.status)}
+                                  </Badge>
+                                </td>
+                                <td className="text-end">{formatPrice(order.products?.[0]?.price || 0)}</td>
+                                <td rowSpan={order.products?.length || 1}>{order.delivery_method?.warehouse || '—'}</td>
+                                <td rowSpan={order.products?.length || 1}>{order.delivery_method?.name || '—'}</td>
+                                <td rowSpan={order.products?.length || 1}>
+                                  {order.supply_barcode_text ? (
+                                    <div>
+                                      <span className="d-block mb-1" style={{ fontSize: '0.85em' }}>
+                                        {order.supply_barcode_text.replace("%960%", "")}
+                                      </span>
+                                      {order.supply_barcode_image && (
+                                        <Button 
+                                          variant="outline-secondary" 
+                                          size="sm"
+                                          onClick={() => window.open(`http://62.113.44.196:8080${order.supply_barcode_image}`, '_blank')}
+                                          title="Посмотреть штрих-код поставки"
+                                        >
+                                          <i className="bi bi-file-earmark-text"></i>
+                                        </Button>
+                                      )}
+                                    </div>
+                                  ) : '—'}
+                                </td>
+                                <td rowSpan={order.products?.length || 1}>
+                                  {order.sticker_pdf ? (
+                                    <Button 
+                                      variant="outline-primary" 
+                                      size="sm"
+                                      onClick={() => window.open(`http://62.113.44.196:8080${order.sticker_pdf}`, '_blank')}
+                                      title="Скачать стикер"
+                                    >
+                                      <i className="bi bi-download"></i>
+                                    </Button>
+                                  ) : '—'}
+                                </td>
+                                <td rowSpan={order.products?.length || 1}>
+                                  <Button
+                                    variant="outline-info"
+                                    size="sm"
+                                    onClick={() => handleShowOzonOrderDetails(order)}
+                                    title="Просмотр деталей"
+                                  >
+                                    <i className="bi bi-eye"></i>
+                                  </Button>
+                                </td>
+                              </tr>
+                              
+                              {/* Остальные товары отображаем в отдельных строках */}
+                              {order.products?.slice(1).map((product: OzonOrderProduct, idx: number) => (
+                                <tr key={`${orderId}-product-${idx + 1}`}>
+                                  <td></td> {/* Чекбокс */}
+                                                                     {/* Пропускаем ячейки с rowSpan */}
+                                  <td>{product.name || '—'}</td>
+                                  <td>{product.sku || '—'}</td>
+                                  <td className="text-center">{product.quantity || 1} шт.</td>
+                                   {/* Пропускаем ячейку статуса с rowSpan */}
+                                  <td className="text-end">{formatPrice(product.price || 0)}</td>
+                                   {/* Пропускаем оставшиеся ячейки с rowSpan */}
+                                </tr>
+                              ))}
+                              
+
+                            </React.Fragment>
+                          );
+                        })}
                       </tbody>
                     </Table>
                     {ozonOrders.length > 0 && (
@@ -3290,6 +3569,13 @@ const Dashboard: React.FC = () => {
                             currentSortDirection={ymSortDirection}
                             onSort={handleYmSort}
                           />
+                          <SortableColumnHeader
+                            column="supply_id"
+                            title="ID поставки"
+                            currentSortColumn={ymSortColumn}
+                            currentSortDirection={ymSortDirection}
+                            onSort={handleYmSort}
+                          />
                           <th>Стикер</th>
                         </tr>
                       </thead>
@@ -3318,6 +3604,33 @@ const Dashboard: React.FC = () => {
                             <td>{order.delivery_type || order.delivery_service_name || '—'}</td>
                             <td>{order.customer_name || '—'}</td>
                             <td>{order.delivery_address || '—'}</td>
+                            <td>
+                              {order.supply_id ? (
+                                <div className="d-flex align-items-center">
+                                  <span className="me-2">{order.supply_id}</span>
+                                  {!order.supply_reception_transfer_act && (
+                                    <Button
+                                      variant="outline-success"
+                                      size="sm"
+                                      title="Подтвердить поставку"
+                                      onClick={() => handleConfirmYandexShipment(order)}
+                                    >
+                                      <i className="bi bi-check-circle"></i>
+                                    </Button>
+                                  )}
+                                  {order.supply_reception_transfer_act && (
+                                    <Button
+                                      variant="outline-primary"
+                                      size="sm"
+                                      title="Скачать акт приема-передачи"
+                                      onClick={() => window.open(`http://62.113.44.196:8080${order.supply_reception_transfer_act}`, '_blank')}
+                                    >
+                                      <i className="bi bi-file-earmark-text"></i>
+                                    </Button>
+                                  )}
+                                </div>
+                              ) : '—'}
+                            </td>
                             <td>
                               {order.sticker_pdf ? (
                                 <Button 
