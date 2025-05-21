@@ -135,31 +135,54 @@ const Dashboard: React.FC = () => {
   // Состояние для отображения только выбранного юридического лица
   const [showAllLegalEntities, setShowAllLegalEntities] = useState<boolean>(true);
 
-  // Добавляем состояния для фильтрации по статусам
-  const [wbStatusFilter, setWbStatusFilter] = useState<string | null>(null);
-  const [ozonStatusFilter, setOzonStatusFilter] = useState<string | null>(null);
-  const [ymStatusFilter, setYmStatusFilter] = useState<string | null>(null);
-
   // Добавляем состояние для фильтра по статусу WB
   const [wbStatusWbFilter, setWbStatusWbFilter] = useState<string | null>(null);
   const [selectedWbOrder, setSelectedWbOrder] = useState<WbOrder | null>(null);
   const [showWbModal, setShowWbModal] = useState(false);
 
+  // Состояния для фильтров статусов (множественный выбор)
+  const [wbStatusFilters, setWbStatusFilters] = useState<string[]>([]);
+  const [ozonStatusFilters, setOzonStatusFilters] = useState<string[]>([]);
+  const [ymStatusFilters, setYmStatusFilters] = useState<string[]>([]);
+  
+  // Эти состояния добавлены для обратной совместимости
+  const [ozonStatusFilter, setOzonStatusFilter] = useState<string | null>(null);
+  const [ymStatusFilter, setYmStatusFilter] = useState<string | null>(null);
+
+  // Обработчики изменения фильтров статусов
+  const handleWbStatusFilterChange = (status: string) => {
+    setWbStatusFilters(prev => 
+      prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
+    );
+  };
+
+  const handleOzonStatusFilterChange = (status: string) => {
+    setOzonStatusFilters(prev => 
+      prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
+    );
+  };
+
+  const handleYmStatusFilterChange = (status: string) => {
+    setYmStatusFilters(prev => 
+      prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
+    );
+  };
+
   // Обновляем useEffect для сброса текущей страницы и обновления данных при изменении фильтров
   useEffect(() => {
-    // Сброс текущей страницы Wildberries при изменении фильтра WB
+    // Сброс текущей страницы Wildberries при изменении фильтров WB
     setWbCurrentPage(1);
-  }, [wbStatusWbFilter]);
+  }, [wbStatusWbFilter, wbStatusFilters]);
 
   useEffect(() => {
-    // Сброс текущей страницы Ozon при изменении фильтра Ozon
+    // Сброс текущей страницы Ozon при изменении фильтров Ozon
     setOzonCurrentPage(1);
-  }, [ozonStatusFilter]);
+  }, [ozonStatusFilters]);
 
   useEffect(() => {
-    // Сброс текущей страницы Yandex Market при изменении фильтра Yandex Market
+    // Сброс текущей страницы Yandex Market при изменении фильтров Yandex Market
     setYmCurrentPage(1);
-  }, [ymStatusFilter]);
+  }, [ymStatusFilters]);
 
   /**
    * Загрузка списка юридических лиц с сервера
@@ -1916,11 +1939,19 @@ const Dashboard: React.FC = () => {
    * Получение отфильтрованных заказов Wildberries
    */
   const getFilteredWbOrders = () => {
-    // Фильтруем заказы только если выбран фильтр статуса WB
+    let filteredOrders = getSortedWbOrders();
+    
+    // Применяем фильтр по статусу WB (оставляем для совместимости)
     if (wbStatusWbFilter) {
-      return getSortedWbOrders().filter(order => order.wb_status === wbStatusWbFilter);
+      filteredOrders = filteredOrders.filter(order => order.wb_status === wbStatusWbFilter);
     }
-    return getSortedWbOrders();
+    
+    // Применяем множественные фильтры по статусу
+    if (wbStatusFilters.length > 0) {
+      filteredOrders = filteredOrders.filter(order => wbStatusFilters.includes(order.wb_status || ''));
+    }
+    
+    return filteredOrders;
   };
 
   /**
@@ -1929,9 +1960,12 @@ const Dashboard: React.FC = () => {
   const getFilteredOzonOrders = () => {
     let filteredOrders = getSortedOzonOrders();
     
-    if (ozonStatusFilter) {
+    // Применяем множественные фильтры по статусу Ozon
+    if (ozonStatusFilters.length > 0) {
       filteredOrders = filteredOrders.filter(order => 
-        (order.status || '').toLowerCase() === ozonStatusFilter.toLowerCase()
+        ozonStatusFilters.some(filter => 
+          (order.status || '').toLowerCase() === filter.toLowerCase()
+        )
       );
     }
     
@@ -1944,9 +1978,12 @@ const Dashboard: React.FC = () => {
   const getFilteredYmOrders = () => {
     let filteredOrders = getSortedYmOrders();
     
-    if (ymStatusFilter) {
+    // Применяем множественные фильтры по статусу Яндекс Маркет
+    if (ymStatusFilters.length > 0) {
       filteredOrders = filteredOrders.filter(order => 
-        (order.status || '').toLowerCase() === ymStatusFilter.toLowerCase()
+        ymStatusFilters.some(filter => 
+          (order.status || '').toLowerCase() === filter.toLowerCase()
+        )
       );
     }
     
@@ -2038,7 +2075,7 @@ const Dashboard: React.FC = () => {
       />
     );
   };
-  
+
   /**
    * Обработчик для отображения модального окна с деталями заказа Wildberries
    */
@@ -2229,12 +2266,15 @@ const Dashboard: React.FC = () => {
       setStatusChangeSuccess(true);
       alert(resultMessage);
       
+      // Обновляем базу данных Ozon после отправки в поставку
+      await updateOzonDatabase();
+      
       // Обновляем данные заказов
       setTimeout(() => {
         if (selectedLegalEntity) {
           loadOzonOrders(selectedLegalEntity);
         }
-      }, 1500);
+      }, 1000);
     } catch (error) {
       console.error('Ошибка запроса:', error);
       setStatusChangeError(error instanceof Error ? error.message : 'Произошла ошибка при добавлении заказов в поставку');
@@ -2545,7 +2585,121 @@ const Dashboard: React.FC = () => {
     );
   };
 
+  /**
+   * Компонент чекбокса для фильтров
+   */
+  const FilterCheckbox = ({ 
+    label, 
+    value, 
+    checked, 
+    onChange 
+  }: { 
+    label: string; 
+    value: string; 
+    checked: boolean; 
+    onChange: (value: string) => void;
+  }) => (
+    <Form.Check
+      type="checkbox"
+      id={`check-${value.replace(/\s+/g, '-').toLowerCase()}`}
+      label={label}
+      checked={checked}
+      onChange={() => onChange(value)}
+      className="mb-1"
+    />
+  );
+  
+  /**
+   * Компонент раздела фильтров
+   */
+  const FilterSection = ({ 
+    title, 
+    children 
+  }: { 
+    title: string; 
+    children: ReactNode;
+  }) => (
+    <div className="mb-3 me-4">
+      <h6 className="mb-2">{title}:</h6>
+      <div className="ms-2">
+        {children}
+      </div>
+    </div>
+  );
 
+  /**
+   * Компонент выпадающего списка с множественным выбором
+   */
+  const MultiSelectDropdown = ({ 
+    title, 
+    options, 
+    selectedValues, 
+    onChange 
+  }: { 
+    title: string; 
+    options: { value: string; label: string }[]; 
+    selectedValues: string[];
+    onChange: (value: string) => void;
+  }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    
+    const toggleDropdown = () => setIsOpen(!isOpen);
+    const selectedCount = selectedValues.length;
+    
+    return (
+      <div className="multi-select-dropdown">
+        <h6 className="mb-2">{title}:</h6>
+        <div className="position-relative">
+          <Button 
+            variant="outline-secondary" 
+            onClick={toggleDropdown} 
+            className="d-flex justify-content-between align-items-center w-100"
+            style={{ minWidth: '250px' }}
+          >
+            <span>{selectedCount > 0 ? `Выбрано: ${selectedCount}` : 'Все'}</span>
+            <i className={`bi bi-chevron-${isOpen ? 'up' : 'down'}`}></i>
+          </Button>
+          
+          {isOpen && (
+            <Card className="position-absolute w-100 mt-1 shadow-sm" style={{ zIndex: 1000 }}>
+              <Card.Body className="p-2">
+                <div className="mb-2">
+                  <Button 
+                    variant="link" 
+                    size="sm" 
+                    className="p-0 text-decoration-none"
+                    onClick={() => options.forEach(opt => onChange(opt.value))}
+                  >
+                    Выбрать все
+                  </Button> / 
+                  <Button 
+                    variant="link" 
+                    size="sm" 
+                    className="p-0 text-decoration-none"
+                    onClick={() => selectedValues.forEach(val => onChange(val))}
+                  >
+                    Очистить
+                  </Button>
+                </div>
+                
+                {options.map(option => (
+                  <Form.Check 
+                    key={option.value}
+                    type="checkbox"
+                    id={`check-${option.value.replace(/\s+/g, '-').toLowerCase()}`}
+                    label={option.label}
+                    checked={selectedValues.includes(option.value)}
+                    onChange={() => onChange(option.value)}
+                    className="mb-1"
+                  />
+                ))}
+              </Card.Body>
+            </Card>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <Container fluid className="dashboard-container">
@@ -2743,22 +2897,19 @@ const Dashboard: React.FC = () => {
 
                 </div>
                 
-                {/* Кнопки фильтрации по статусам Wildberries */}
+                {/* Фильтрация по статусам Wildberries */}
                 <div className="mb-3">
-                  <div>
-                    <h6 className="mb-2">Статус Wildberries:</h6>
-                    <Form.Select
-                      value={wbStatusWbFilter || ''}
-                      onChange={(e) => setWbStatusWbFilter(e.target.value || null)}
-                      className="w-auto"
-                    >
-                      <option value="">Все</option>
-                      <option value="new">Новый</option>
-                      <option value="confirm">Подтвержден</option>
-                      <option value="cancel">Отменен</option>
-                      <option value="complete">Выполнен</option>
-                    </Form.Select>
-                  </div>
+                  <MultiSelectDropdown
+                    title="Статус Wildberries"
+                    options={[
+                      { value: "new", label: "Новый" },
+                      { value: "confirm", label: "Подтвержден" },
+                      { value: "cancel", label: "Отменен" },
+                      { value: "complete", label: "Выполнен" }
+                    ]}
+                    selectedValues={wbStatusFilters}
+                    onChange={handleWbStatusFilterChange}
+                  />
                 </div>
                 
                 {wbOrdersLoading ? (
@@ -3051,21 +3202,18 @@ const Dashboard: React.FC = () => {
 
                 {/* Фильтрация по статусам Ozon */}
                 <div className="mb-3">
-                  <div>
-                    <h6 className="mb-2">Статус Ozon:</h6>
-                    <Form.Select
-                      value={ozonStatusFilter || ''}
-                      onChange={(e) => setOzonStatusFilter(e.target.value || null)}
-                      className="w-auto"
-                    >
-                      <option value="">Все</option>
-                      <option value="awaiting_packaging">Ожидает упаковки</option>
-                      <option value="awaiting_deliver">Ожидает доставки</option>
-                      <option value="delivering">Доставляется</option>
-                      <option value="delivered">Доставлен</option>
-                      <option value="cancelled">Отменен</option>
-                    </Form.Select>
-                  </div>
+                  <MultiSelectDropdown
+                    title="Статус Ozon"
+                    options={[
+                      { value: "awaiting_packaging", label: "Ожидает упаковки" },
+                      { value: "awaiting_deliver", label: "Ожидает доставки" },
+                      { value: "delivering", label: "Доставляется" },
+                      { value: "delivered", label: "Доставлен" },
+                      { value: "cancelled", label: "Отменен" }
+                    ]}
+                    selectedValues={ozonStatusFilters}
+                    onChange={handleOzonStatusFilterChange}
+                  />
                 </div>
                 
                 {ozonOrdersLoading ? (
@@ -3450,24 +3598,21 @@ const Dashboard: React.FC = () => {
 
                 {/* Фильтрация по статусам Яндекс Маркет */}
                 <div className="mb-3">
-                  <div>
-                    <h6 className="mb-2">Статус Яндекс Маркет:</h6>
-                    <Form.Select
-                      value={ymStatusFilter || ''}
-                      onChange={(e) => setYmStatusFilter(e.target.value || null)}
-                      className="w-auto"
-                    >
-                      <option value="">Все</option>
-                      <option value="new">Новый</option>
-                      <option value="PROCESSING">В обработке</option>
-                      <option value="READY_TO_SHIP">Готов к отправке</option>
-                      <option value="SHIPPED">Отправлен</option>
-                      <option value="DELIVERED">Доставлен</option>
-                      <option value="CANCELLED">Отменен</option>
-                      <option value="PICKUP">Самовывоз</option>
-                      <option value="DELIVERY">Доставка</option>
-                    </Form.Select>
-                  </div>
+                  <MultiSelectDropdown
+                    title="Статус Яндекс Маркет"
+                    options={[
+                      { value: "new", label: "Новый" },
+                      { value: "PROCESSING", label: "В обработке" },
+                      { value: "READY_TO_SHIP", label: "Готов к отправке" },
+                      { value: "SHIPPED", label: "Отправлен" },
+                      { value: "DELIVERED", label: "Доставлен" },
+                      { value: "CANCELLED", label: "Отменен" },
+                      { value: "PICKUP", label: "Самовывоз" },
+                      { value: "DELIVERY", label: "Доставка" }
+                    ]}
+                    selectedValues={ymStatusFilters}
+                    onChange={handleYmStatusFilterChange}
+                  />
                 </div>
                 
                 {ymOrdersLoading ? (
@@ -3555,13 +3700,7 @@ const Dashboard: React.FC = () => {
                             currentSortDirection={ymSortDirection}
                             onSort={handleYmSort}
                           />
-                          <SortableColumnHeader
-                            column="customer_name"
-                            title="Клиент"
-                            currentSortColumn={ymSortColumn}
-                            currentSortDirection={ymSortDirection}
-                            onSort={handleYmSort}
-                          />
+
                           <SortableColumnHeader
                             column="delivery_address"
                             title="Адрес доставки"
@@ -3602,7 +3741,6 @@ const Dashboard: React.FC = () => {
                             <td>{formatPrice(order.price || order.total_price)}</td>
                             <td>{order.region || order.delivery_region || '—'}</td>
                             <td>{order.delivery_type || order.delivery_service_name || '—'}</td>
-                            <td>{order.customer_name || '—'}</td>
                             <td>{order.delivery_address || '—'}</td>
                             <td>
                               {order.supply_id ? (
