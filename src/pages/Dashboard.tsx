@@ -97,6 +97,7 @@ const Dashboard: React.FC = () => {
   const [wbOrdersLoading, setWbOrdersLoading] = useState<boolean>(false);
   const [wbOrdersError, setWbOrdersError] = useState<string | null>(null);
   const [selectedWbOrders, setSelectedWbOrders] = useState<Set<number | string>>(new Set());
+  const [lastSelectedWbOrder, setLastSelectedWbOrder] = useState<number | string | null>(null);
   const [selectAllWb, setSelectAllWb] = useState<boolean>(false);
   const [wbSortColumn, setWbSortColumn] = useState<string | null>(null);
   const [wbSortDirection, setWbSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -109,6 +110,7 @@ const Dashboard: React.FC = () => {
   const [ozonOrdersLoading, setOzonOrdersLoading] = useState<boolean>(false);
   const [ozonOrdersError, setOzonOrdersError] = useState<string | null>(null);
   const [selectedOzonOrders, setSelectedOzonOrders] = useState<Set<number | string>>(new Set());
+  const [lastSelectedOzonOrder, setLastSelectedOzonOrder] = useState<number | string | null>(null);
   const [selectAllOzon, setSelectAllOzon] = useState<boolean>(false);
   const [ozonSortColumn, setOzonSortColumn] = useState<string | null>(null);
   const [ozonSortDirection, setOzonSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -120,6 +122,7 @@ const Dashboard: React.FC = () => {
   const [ymOrdersLoading, setYmOrdersLoading] = useState<boolean>(false);
   const [ymOrdersError, setYmOrdersError] = useState<string | null>(null);
   const [selectedYmOrders, setSelectedYmOrders] = useState<Set<number | string>>(new Set());
+  const [lastSelectedYmOrder, setLastSelectedYmOrder] = useState<number | string | null>(null);
   const [selectAllYm, setSelectAllYm] = useState<boolean>(false);
   const [ymSortColumn, setYmSortColumn] = useState<string | null>(null);
   const [ymSortDirection, setYmSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -359,17 +362,62 @@ const Dashboard: React.FC = () => {
 
   /**
    * Обработчики выбора заказов Wildberries
+   * @param orderId ID заказа для выбора
+   * @param event Событие мыши, которое содержит информацию о нажатых клавишах
    */
-  const handleSelectWbOrder = (orderId: number | string) => {
+  const handleSelectWbOrder = (orderId: number | string, event?: React.MouseEvent) => {
+    const shiftKeyPressed = event?.shiftKey;
+    
+    // Обычный выбор при отсутствии Shift
+    if (!shiftKeyPressed || !lastSelectedWbOrder) {
+      setSelectedWbOrders(prevSelected => {
+        const newSelected = new Set(prevSelected);
+        if (newSelected.has(orderId)) {
+          newSelected.delete(orderId);
+        } else {
+          newSelected.add(orderId);
+        }
+        setLastSelectedWbOrder(orderId);
+        return newSelected;
+      });
+      return;
+    }
+    
+    // Выбор диапазона при нажатии Shift
+    const currentPageOrders = getCurrentPageWbOrders();
+    const orderIds = currentPageOrders.map(order => order.id || order.order_id || '');
+    
+    // Индексы выбранных заказов в массиве текущей страницы
+    const lastSelectedIndex = orderIds.findIndex(id => id === lastSelectedWbOrder);
+    const currentIndex = orderIds.findIndex(id => id === orderId);
+    
+    if (lastSelectedIndex === -1 || currentIndex === -1) {
+      // Если индекс не найден, просто выбираем текущий заказ
+      setSelectedWbOrders(prevSelected => {
+        const newSelected = new Set(prevSelected);
+        newSelected.add(orderId);
+        return newSelected;
+      });
+      setLastSelectedWbOrder(orderId);
+      return;
+    }
+    
+    // Определяем начальный и конечный индексы для выделения диапазона
+    const startIndex = Math.min(lastSelectedIndex, currentIndex);
+    const endIndex = Math.max(lastSelectedIndex, currentIndex);
+    
+    // Выбираем все заказы в диапазоне
+    const orderIdsToSelect = orderIds.slice(startIndex, endIndex + 1);
+    
     setSelectedWbOrders(prevSelected => {
       const newSelected = new Set(prevSelected);
-      if (newSelected.has(orderId)) {
-        newSelected.delete(orderId);
-      } else {
-        newSelected.add(orderId);
-      }
+      orderIdsToSelect.forEach(id => {
+        if (id) newSelected.add(id);
+      });
       return newSelected;
     });
+    
+    setLastSelectedWbOrder(orderId);
   };
 
   const handleSelectAllWb = () => {
@@ -385,17 +433,62 @@ const Dashboard: React.FC = () => {
   
   /**
    * Обработчики выбора заказов Ozon
+   * @param orderId ID заказа для выбора
+   * @param event Событие мыши, которое содержит информацию о нажатых клавишах
    */
-  const handleSelectOzonOrder = (orderId: number | string) => {
+  const handleSelectOzonOrder = (orderId: number | string, event?: React.MouseEvent) => {
+    const shiftKeyPressed = event?.shiftKey;
+    
+    // Обычный выбор при отсутствии Shift
+    if (!shiftKeyPressed || !lastSelectedOzonOrder) {
+      setSelectedOzonOrders(prevSelected => {
+        const newSelected = new Set(prevSelected);
+        if (newSelected.has(orderId)) {
+          newSelected.delete(orderId);
+        } else {
+          newSelected.add(orderId);
+        }
+        setLastSelectedOzonOrder(orderId);
+        return newSelected;
+      });
+      return;
+    }
+    
+    // Выбор диапазона при нажатии Shift
+    const currentPageOrders = getCurrentPageOzonOrders();
+    const orderIds = currentPageOrders.map(order => order.id || order.order_id || '');
+    
+    // Индексы выбранных заказов в массиве текущей страницы
+    const lastSelectedIndex = orderIds.findIndex(id => id === lastSelectedOzonOrder);
+    const currentIndex = orderIds.findIndex(id => id === orderId);
+    
+    if (lastSelectedIndex === -1 || currentIndex === -1) {
+      // Если индекс не найден, просто выбираем текущий заказ
+      setSelectedOzonOrders(prevSelected => {
+        const newSelected = new Set(prevSelected);
+        newSelected.add(orderId);
+        return newSelected;
+      });
+      setLastSelectedOzonOrder(orderId);
+      return;
+    }
+    
+    // Определяем начальный и конечный индексы для выделения диапазона
+    const startIndex = Math.min(lastSelectedIndex, currentIndex);
+    const endIndex = Math.max(lastSelectedIndex, currentIndex);
+    
+    // Выбираем все заказы в диапазоне
+    const orderIdsToSelect = orderIds.slice(startIndex, endIndex + 1);
+    
     setSelectedOzonOrders(prevSelected => {
       const newSelected = new Set(prevSelected);
-      if (newSelected.has(orderId)) {
-        newSelected.delete(orderId);
-      } else {
-        newSelected.add(orderId);
-      }
+      orderIdsToSelect.forEach(id => {
+        if (id) newSelected.add(id);
+      });
       return newSelected;
     });
+    
+    setLastSelectedOzonOrder(orderId);
   };
 
   const handleSelectAllOzon = () => {
@@ -411,17 +504,62 @@ const Dashboard: React.FC = () => {
   
   /**
    * Обработчики выбора заказов Яндекс Маркет
+   * @param orderId ID заказа для выбора
+   * @param event Событие мыши, которое содержит информацию о нажатых клавишах
    */
-  const handleSelectYmOrder = (orderId: number | string) => {
+  const handleSelectYmOrder = (orderId: number | string, event?: React.MouseEvent) => {
+    const shiftKeyPressed = event?.shiftKey;
+    
+    // Обычный выбор при отсутствии Shift
+    if (!shiftKeyPressed || !lastSelectedYmOrder) {
+      setSelectedYmOrders(prevSelected => {
+        const newSelected = new Set(prevSelected);
+        if (newSelected.has(orderId)) {
+          newSelected.delete(orderId);
+        } else {
+          newSelected.add(orderId);
+        }
+        setLastSelectedYmOrder(orderId);
+        return newSelected;
+      });
+      return;
+    }
+    
+    // Выбор диапазона при нажатии Shift
+    const currentPageOrders = getCurrentPageYmOrders();
+    const orderIds = currentPageOrders.map(order => order.id || order.order_id || '');
+    
+    // Индексы выбранных заказов в массиве текущей страницы
+    const lastSelectedIndex = orderIds.findIndex(id => id === lastSelectedYmOrder);
+    const currentIndex = orderIds.findIndex(id => id === orderId);
+    
+    if (lastSelectedIndex === -1 || currentIndex === -1) {
+      // Если индекс не найден, просто выбираем текущий заказ
+      setSelectedYmOrders(prevSelected => {
+        const newSelected = new Set(prevSelected);
+        newSelected.add(orderId);
+        return newSelected;
+      });
+      setLastSelectedYmOrder(orderId);
+      return;
+    }
+    
+    // Определяем начальный и конечный индексы для выделения диапазона
+    const startIndex = Math.min(lastSelectedIndex, currentIndex);
+    const endIndex = Math.max(lastSelectedIndex, currentIndex);
+    
+    // Выбираем все заказы в диапазоне
+    const orderIdsToSelect = orderIds.slice(startIndex, endIndex + 1);
+    
     setSelectedYmOrders(prevSelected => {
       const newSelected = new Set(prevSelected);
-      if (newSelected.has(orderId)) {
-        newSelected.delete(orderId);
-      } else {
-        newSelected.add(orderId);
-      }
+      orderIdsToSelect.forEach(id => {
+        if (id) newSelected.add(id);
+      });
       return newSelected;
     });
+    
+    setLastSelectedYmOrder(orderId);
   };
 
   const handleSelectAllYm = () => {
@@ -3137,7 +3275,7 @@ const Dashboard: React.FC = () => {
                               <Form.Check
                                 type="checkbox"
                                 checked={selectedWbOrders.has(order.id || order.order_id || index)}
-                                onChange={() => handleSelectWbOrder(order.id || order.order_id || index)}
+                                onChange={(e) => handleSelectWbOrder(order.id || order.order_id || index, e.nativeEvent as unknown as React.MouseEvent)}
                                 aria-label={`Выбрать заказ ${order.id || order.order_id || index}`}
                               />
                             </td>
@@ -3473,7 +3611,7 @@ const Dashboard: React.FC = () => {
                                   <Form.Check
                                     type="checkbox"
                                     checked={selectedOzonOrders.has(order.id || order.order_id || '')}
-                                    onChange={() => handleSelectOzonOrder(order.id || order.order_id || '')}
+                                    onChange={(e) => handleSelectOzonOrder(order.id || order.order_id || '', e.nativeEvent as unknown as React.MouseEvent)}
                                     aria-label={`Выбрать заказ ${order.id || order.order_id || ''}`}
                                   />
                                 </td>
@@ -3547,7 +3685,7 @@ const Dashboard: React.FC = () => {
                                   <Form.Check
                                     type="checkbox"
                                     checked={selectedOzonOrders.has(order.id || order.order_id || '')}
-                                    onChange={() => handleSelectOzonOrder(order.id || order.order_id || '')}
+                                    onChange={(e) => handleSelectOzonOrder(order.id || order.order_id || '', e.nativeEvent as unknown as React.MouseEvent)}
                                     aria-label={`Выбрать заказ ${order.id || order.order_id || ''}`}
                                   />
                                 </td>
@@ -3893,7 +4031,7 @@ const Dashboard: React.FC = () => {
                               <Form.Check
                                 type="checkbox"
                                 checked={selectedYmOrders.has(order.id || order.order_id || index)}
-                                onChange={() => handleSelectYmOrder(order.id || order.order_id || index)}
+                                onChange={(e) => handleSelectYmOrder(order.id || order.order_id || index, e.nativeEvent as unknown as React.MouseEvent)}
                                 aria-label={`Выбрать заказ ${order.id || order.order_id || index}`}
                               />
                             </td>
