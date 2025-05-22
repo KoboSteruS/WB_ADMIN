@@ -31,7 +31,7 @@ import {
   confirmShipment as confirmYandexMarketShipment
 } from '../services/yandexMarketApi';
 import { formatDate, formatPrice } from '../utils/orderUtils';
-import { getBadgeColor, getStatusText } from '../utils/statusHelpers';
+import { getBadgeColor, getStatusText, getSubstatusText } from '../utils/statusHelpers';
 import { mergePDFsInOrder, downloadBlob, mergePDFsWithoutDuplicates } from '../utils/pdfUtils';
 
 // Импорт модального окна для отображения деталей заказа
@@ -145,6 +145,21 @@ const Dashboard: React.FC = () => {
   const [ozonStatusFilters, setOzonStatusFilters] = useState<string[]>([]);
   const [ymStatusFilters, setYmStatusFilters] = useState<string[]>([]);
   const [ymSupplyStatusFilters, setYmSupplyStatusFilters] = useState<string[]>([]);
+  const [ymSubstatusFilters, setYmSubstatusFilters] = useState<string[]>([]);
+  const [substatusOptions, setSubstatusOptions] = useState<{value: string; label: string}[]>([]);
+  
+  // Загружаем сохраненные опции подстатусов при инициализации
+  useEffect(() => {
+    const savedOptions = localStorage.getItem('ymSubstatusOptions');
+    if (savedOptions) {
+      try {
+        const options = JSON.parse(savedOptions);
+        setSubstatusOptions(options);
+      } catch (e) {
+        console.error('Ошибка при загрузке сохраненных подстатусов:', e);
+      }
+    }
+  }, []);
   
   // Эти состояния добавлены для обратной совместимости
   const [ozonStatusFilter, setOzonStatusFilter] = useState<string | null>(null);
@@ -175,6 +190,15 @@ const Dashboard: React.FC = () => {
     );
   };
 
+  /**
+   * Обработчик изменения фильтров подстатусов Яндекс Маркет
+   */
+  const handleYmSubstatusFilterChange = (substatus: string) => {
+    setYmSubstatusFilters(prev => 
+      prev.includes(substatus) ? prev.filter(s => s !== substatus) : [...prev, substatus]
+    );
+  };
+
   // Обновляем useEffect для сброса текущей страницы и обновления данных при изменении фильтров
   useEffect(() => {
     // Сброс текущей страницы Wildberries при изменении фильтров WB
@@ -189,7 +213,7 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     // Сброс текущей страницы Yandex Market при изменении фильтров Yandex Market
     setYmCurrentPage(1);
-  }, [ymStatusFilters, ymSupplyStatusFilters]);
+  }, [ymStatusFilters, ymSupplyStatusFilters, ymSubstatusFilters]);
 
   /**
    * Загрузка списка юридических лиц с сервера
@@ -1982,7 +2006,7 @@ const Dashboard: React.FC = () => {
   /**
    * Получение отфильтрованных заказов Яндекс Маркет
    */
-  const getFilteredYmOrders = () => {
+    const getFilteredYmOrders = () => {
     let filteredOrders = getSortedYmOrders();
     
     // Применяем множественные фильтры по статусу Яндекс Маркет
@@ -1994,11 +2018,19 @@ const Dashboard: React.FC = () => {
       );
     }
     
-        // Применяем множественные фильтры по статусу поставки
+    // Применяем множественные фильтры по статусу поставки
     if (ymSupplyStatusFilters.length > 0) {
       filteredOrders = filteredOrders.filter(order => {
         // Проверяем точное соответствие одному из выбранных фильтров
         return ymSupplyStatusFilters.includes(order.supply_status || '');
+      });
+    }
+    
+    // Применяем множественные фильтры по подстатусу
+    if (ymSubstatusFilters.length > 0) {
+      filteredOrders = filteredOrders.filter(order => {
+        // Проверяем точное соответствие одному из выбранных фильтров подстатусов
+        return ymSubstatusFilters.includes(order.substatus || '');
       });
     }
     
@@ -2767,6 +2799,42 @@ const Dashboard: React.FC = () => {
     );
   };
 
+  /**
+   * Обработчик кнопки для отображения текущих значений заказов Яндекс Маркет и обновления фильтров
+   */
+  const updateSubstatusFilters = () => {
+    // Получаем уникальные подстатусы из заказов
+    const uniqueSubstatuses = new Set<string>();
+    
+    ymOrders.forEach(order => {
+      if (order.substatus) uniqueSubstatuses.add(String(order.substatus));
+    });
+    
+    const substatusArray = Array.from(uniqueSubstatuses);
+    console.log('Обнаружены подстатусы:', substatusArray);
+    
+    // Очищаем текущие фильтры подстатусов
+    setYmSubstatusFilters([]);
+    
+    // Генерируем варианты для фильтра подстатусов на основе реальных данных
+    const substatusOptions = substatusArray.map(substatus => ({
+      value: substatus,
+      label: getSubstatusText(substatus)
+    }));
+    
+    // Сортируем опции по алфавиту русских названий
+    substatusOptions.sort((a, b) => a.label.localeCompare(b.label));
+    
+    // Сохраняем обнаруженные подстатусы в локальном хранилище
+    localStorage.setItem('ymSubstatusOptions', JSON.stringify(substatusOptions));
+    
+    alert(`Обнаружено ${substatusArray.length} уникальных подстатусов.
+Фильтр подстатусов обновлен на основе реальных данных.`);
+    
+    // Перезагрузка компонента для обновления UI (можно также использовать состояние вместо перезагрузки)
+    window.location.reload();
+  };
+
   return (
     <Container fluid className="dashboard-container">
       {/* Модальное окно с деталями заказа */}
@@ -3415,11 +3483,14 @@ const Dashboard: React.FC = () => {
                                 <td>{order.products?.[0]?.name || order.product_name || order.name || '—'}</td>
                                 <td>{order.products?.[0]?.sku || order.sku || order.offer_id || '—'}</td>
                                 <td>{order.products?.[0]?.quantity || '—'}</td>
-                                <td>
-                                  <Badge bg={getBadgeColor(order.status)}>
-                                    {getStatusText(order.status)}
-                                  </Badge>
-                                </td>
+                                                                                            <td>
+                                <Badge bg={getBadgeColor(order.status)}>
+                                  {getStatusText(order.status)}
+                                </Badge>
+                              </td>
+                              <td>
+                                {order.substatus || '-'}
+                              </td>
                                 <td className="text-end">{formatPrice(order.products?.[0]?.price || order.price || order.sale_price || 0)}</td>
                                 <td>{order.delivery_method?.warehouse || '—'}</td>
                                 <td>{order.delivery_method?.name || '—'}</td>
@@ -3649,6 +3720,8 @@ const Dashboard: React.FC = () => {
                   >
                     <i className="bi bi-check-all me-1"></i> Выделить все заказы
                   </Button>
+                  
+
 
                   
                   <Button 
@@ -3661,6 +3734,8 @@ const Dashboard: React.FC = () => {
                   >
                     <i className="bi bi-file-earmark-spreadsheet me-1"></i> Сгенерировать отчеты
                   </Button>
+                  
+
                 </div>
 
                 {/* Фильтрация по статусам поставки Яндекс Маркет */}
@@ -3676,6 +3751,17 @@ const Dashboard: React.FC = () => {
                     ]}
                     selectedValues={ymSupplyStatusFilters}
                     onChange={handleYmSupplyStatusFilterChange}
+                  />
+                  
+                  <MultiSelectDropdown
+                    title="Подстатус заказа"
+                    options={[
+                      { value: "SHIPPED", label: "Отправлен" },
+                      { value: "READY_TO_SHIP", label: "Готов к отправке" },
+                      { value: "STARTED", label: "Начат" }
+                    ]}
+                    selectedValues={ymSubstatusFilters}
+                    onChange={handleYmSubstatusFilterChange}
                   />
                 </div>
                 
@@ -3765,6 +3851,7 @@ const Dashboard: React.FC = () => {
                             currentSortDirection={ymSortDirection}
                             onSort={handleYmSort}
                           />
+                          <th>Подстатус</th>
                           <SortableColumnHeader
                             column="price"
                             title="Стоимость"
@@ -3852,6 +3939,7 @@ const Dashboard: React.FC = () => {
                                 {getStatusText(order.status)}
                               </Badge>
                             </td>
+                            <td>{getSubstatusText(order.substatus)}</td>
                             <td>{formatPrice(order.price || order.total_price)}</td>
                             <td>{order.region || order.delivery_region || '—'}</td>
                             <td>{order.delivery_type || order.delivery_service_name || '—'}</td>
