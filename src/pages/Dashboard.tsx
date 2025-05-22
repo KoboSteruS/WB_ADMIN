@@ -144,6 +144,7 @@ const Dashboard: React.FC = () => {
   const [wbStatusFilters, setWbStatusFilters] = useState<string[]>([]);
   const [ozonStatusFilters, setOzonStatusFilters] = useState<string[]>([]);
   const [ymStatusFilters, setYmStatusFilters] = useState<string[]>([]);
+  const [ymSupplyStatusFilters, setYmSupplyStatusFilters] = useState<string[]>([]);
   
   // Эти состояния добавлены для обратной совместимости
   const [ozonStatusFilter, setOzonStatusFilter] = useState<string | null>(null);
@@ -167,6 +168,12 @@ const Dashboard: React.FC = () => {
       prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
     );
   };
+  
+  const handleYmSupplyStatusFilterChange = (status: string) => {
+    setYmSupplyStatusFilters(prev => 
+      prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
+    );
+  };
 
   // Обновляем useEffect для сброса текущей страницы и обновления данных при изменении фильтров
   useEffect(() => {
@@ -182,7 +189,7 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     // Сброс текущей страницы Yandex Market при изменении фильтров Yandex Market
     setYmCurrentPage(1);
-  }, [ymStatusFilters]);
+  }, [ymStatusFilters, ymSupplyStatusFilters]);
 
   /**
    * Загрузка списка юридических лиц с сервера
@@ -1987,6 +1994,14 @@ const Dashboard: React.FC = () => {
       );
     }
     
+        // Применяем множественные фильтры по статусу поставки
+    if (ymSupplyStatusFilters.length > 0) {
+      filteredOrders = filteredOrders.filter(order => {
+        // Проверяем точное соответствие одному из выбранных фильтров
+        return ymSupplyStatusFilters.includes(order.supply_status || '');
+      });
+    }
+    
     return filteredOrders;
   };
 
@@ -2642,17 +2657,44 @@ const Dashboard: React.FC = () => {
     onChange: (value: string) => void;
   }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = React.useRef<HTMLDivElement>(null);
+    
+    // Обработчик для закрытия меню при клике вне его области
+    useEffect(() => {
+      function handleClickOutside(event: MouseEvent) {
+        if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+          setIsOpen(false);
+        }
+      }
+      
+      // Добавляем обработчик только когда меню открыто
+      if (isOpen) {
+        document.addEventListener("mousedown", handleClickOutside);
+      }
+      
+      // Убираем обработчик при размонтировании компонента
+      return () => {
+        document.removeEventListener("mousedown", handleClickOutside);
+      };
+    }, [isOpen]);
     
     const toggleDropdown = () => setIsOpen(!isOpen);
     const selectedCount = selectedValues.length;
     
+    // Закрытие выпадающего списка
+    const closeDropdown = () => setIsOpen(false);
+    
     return (
-      <div className="multi-select-dropdown">
+      <div className="multi-select-dropdown" ref={dropdownRef}>
         <h6 className="mb-2">{title}:</h6>
         <div className="position-relative">
           <Button 
             variant="outline-secondary" 
-            onClick={toggleDropdown} 
+            onClick={(e) => {
+              // Предотвращаем всплытие события, чтобы контролировать открытие/закрытие меню
+              e.stopPropagation();
+              toggleDropdown();
+            }} 
             className="d-flex justify-content-between align-items-center w-100"
             style={{ minWidth: '250px' }}
           >
@@ -2661,22 +2703,28 @@ const Dashboard: React.FC = () => {
           </Button>
           
           {isOpen && (
-            <Card className="position-absolute w-100 mt-1 shadow-sm" style={{ zIndex: 1000 }}>
+            <Card className="position-absolute w-100 mt-1 shadow-sm" style={{ zIndex: 1050 }}>
               <Card.Body className="p-2">
                 <div className="mb-2">
                   <Button 
                     variant="link" 
                     size="sm" 
-                    className="p-0 text-decoration-none"
-                    onClick={() => options.forEach(opt => onChange(opt.value))}
+                    className="p-0 text-decoration-none me-1"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      options.forEach(opt => onChange(opt.value));
+                    }}
                   >
                     Выбрать все
                   </Button> / 
                   <Button 
                     variant="link" 
                     size="sm" 
-                    className="p-0 text-decoration-none"
-                    onClick={() => selectedValues.forEach(val => onChange(val))}
+                    className="p-0 text-decoration-none mx-1"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      selectedValues.forEach(val => onChange(val));
+                    }}
                   >
                     Очистить
                   </Button>
@@ -2689,10 +2737,28 @@ const Dashboard: React.FC = () => {
                     id={`check-${option.value.replace(/\s+/g, '-').toLowerCase()}`}
                     label={option.label}
                     checked={selectedValues.includes(option.value)}
-                    onChange={() => onChange(option.value)}
+                    onChange={(e) => {
+                      // Останавливаем всплытие события, чтобы не закрывалось меню
+                      e.stopPropagation();
+                      onChange(option.value);
+                    }}
+                    onClick={(e) => {
+                      // Предотвращаем всплытие события клика
+                      e.stopPropagation();
+                    }}
                     className="mb-1"
                   />
                 ))}
+                
+                <div className="mt-2 d-flex justify-content-end">
+                  <Button 
+                    variant="primary" 
+                    size="sm" 
+                    onClick={closeDropdown}
+                  >
+                    Применить
+                  </Button>
+                </div>
               </Card.Body>
             </Card>
           )}
@@ -3326,14 +3392,14 @@ const Dashboard: React.FC = () => {
                           <th>Действия</th>
                         </tr>
                       </thead>
-                                            <tbody>
+                      <tbody>
                         {getCurrentPageOzonOrders().map((order, index) => {
                           const orderId = String(order.posting_number || order.order_id || index);
                           const hasMultipleProducts = order.products && order.products.length > 1;
                           
                           // Если один товар, выводим его как обычно
                           if (!hasMultipleProducts) {
-                            return (
+                          return (
                               <tr key={getRowKey(order, 'ozon', index)}>
                                 <td>
                                   <Form.Check
@@ -3366,7 +3432,7 @@ const Dashboard: React.FC = () => {
                                       {order.supply_barcode_image && (
                                         <Button 
                                           variant="outline-secondary" 
-                                          size="sm"
+                                          size="sm" 
                                           onClick={() => window.open(`http://62.113.44.196:8080${order.supply_barcode_image}`, '_blank')}
                                           title="Посмотреть штрих-код поставки"
                                         >
@@ -3375,7 +3441,7 @@ const Dashboard: React.FC = () => {
                                       )}
                                     </div>
                                   ) : '—'}
-                                </td>
+                                  </td>
                                 <td>
                                   {order.sticker_pdf ? (
                                     <Button 
@@ -3480,14 +3546,14 @@ const Dashboard: React.FC = () => {
                                 <tr key={`${orderId}-product-${idx + 1}`}>
                                   <td></td> {/* Чекбокс */}
                                                                      {/* Пропускаем ячейки с rowSpan */}
-                                  <td>{product.name || '—'}</td>
-                                  <td>{product.sku || '—'}</td>
+                                              <td>{product.name || '—'}</td>
+                                              <td>{product.sku || '—'}</td>
                                   <td className="text-center">{product.quantity || 1} шт.</td>
                                    {/* Пропускаем ячейку статуса с rowSpan */}
                                   <td className="text-end">{formatPrice(product.price || 0)}</td>
                                    {/* Пропускаем оставшиеся ячейки с rowSpan */}
-                                </tr>
-                              ))}
+                                            </tr>
+                                          ))}
                               
 
                             </React.Fragment>
@@ -3574,6 +3640,7 @@ const Dashboard: React.FC = () => {
                     <i className="bi bi-database me-1"></i> Обновить БД
                   </Button>
 
+
                   <Button 
                     variant="outline-info" 
                     size="sm" 
@@ -3596,22 +3663,19 @@ const Dashboard: React.FC = () => {
                   </Button>
                 </div>
 
-                {/* Фильтрация по статусам Яндекс Маркет */}
+                {/* Фильтрация по статусам поставки Яндекс Маркет */}
                 <div className="mb-3">
                   <MultiSelectDropdown
-                    title="Статус Яндекс Маркет"
+                    title="Статус поставки"
                     options={[
-                      { value: "new", label: "Новый" },
-                      { value: "PROCESSING", label: "В обработке" },
-                      { value: "READY_TO_SHIP", label: "Готов к отправке" },
-                      { value: "SHIPPED", label: "Отправлен" },
-                      { value: "DELIVERED", label: "Доставлен" },
-                      { value: "CANCELLED", label: "Отменен" },
-                      { value: "PICKUP", label: "Самовывоз" },
-                      { value: "DELIVERY", label: "Доставка" }
+                      { value: "Готова к отправке", label: "Готова к отправке" },
+                      { value: "Завершена", label: "Завершена" },
+                      { value: "Принята с расхождениями", label: "Принята с расхождениями" },
+                      { value: "Принята", label: "Принята" },
+                      { value: "Формируется", label: "Формируется" }
                     ]}
-                    selectedValues={ymStatusFilters}
-                    onChange={handleYmStatusFilterChange}
+                    selectedValues={ymSupplyStatusFilters}
+                    onChange={handleYmSupplyStatusFilterChange}
                   />
                 </div>
                 
@@ -3657,6 +3721,28 @@ const Dashboard: React.FC = () => {
                             currentSortDirection={ymSortDirection}
                             onSort={handleYmSort}
                             isDateColumn={true}
+                          />
+                         <SortableColumnHeader
+                            column="supply_date"
+                            title="Дата поставки"
+                            currentSortColumn={ymSortColumn}
+                            currentSortDirection={ymSortDirection}
+                            onSort={handleYmSort}
+                            isDateColumn={true}
+                          />
+                          <SortableColumnHeader
+                            column="supply_status"
+                            title="Статус поставки"
+                            currentSortColumn={ymSortColumn}
+                            currentSortDirection={ymSortDirection}
+                            onSort={handleYmSort}
+                          />
+                          <SortableColumnHeader
+                            column="supply_id"
+                            title="ID поставки"
+                            currentSortColumn={ymSortColumn}
+                            currentSortDirection={ymSortDirection}
+                            onSort={handleYmSort}
                           />
                           <SortableColumnHeader
                             column="name"
@@ -3708,13 +3794,8 @@ const Dashboard: React.FC = () => {
                             currentSortDirection={ymSortDirection}
                             onSort={handleYmSort}
                           />
-                          <SortableColumnHeader
-                            column="supply_id"
-                            title="ID поставки"
-                            currentSortColumn={ymSortColumn}
-                            currentSortDirection={ymSortDirection}
-                            onSort={handleYmSort}
-                          />
+
+
                           <th>Стикер</th>
                         </tr>
                       </thead>
@@ -3731,17 +3812,12 @@ const Dashboard: React.FC = () => {
                             </td>
                             <td>{order.order_id || '—'}</td>
                             <td>{formatDate(order.created_at || order.created_date)}</td>
-                            <td>{order.name || order.product_name || '—'}</td>
-                            <td>{order.shop_sku || order.offer_id || '—'}</td>
                             <td>
-                              <Badge bg={getBadgeColor(order.status)}>
-                                {getStatusText(order.status)}
-                              </Badge>
+                              {formatDate(order.supply_date) || '—'}
                             </td>
-                            <td>{formatPrice(order.price || order.total_price)}</td>
-                            <td>{order.region || order.delivery_region || '—'}</td>
-                            <td>{order.delivery_type || order.delivery_service_name || '—'}</td>
-                            <td>{order.delivery_address || '—'}</td>
+                            <td>
+                              {order.supply_status || '—'}
+                            </td>
                             <td>
                               {order.supply_id ? (
                                 <div className="d-flex align-items-center">
@@ -3769,6 +3845,19 @@ const Dashboard: React.FC = () => {
                                 </div>
                               ) : '—'}
                             </td>
+                            <td>{order.name || order.product_name || '—'}</td>
+                            <td>{order.shop_sku || order.offer_id || '—'}</td>
+                            <td>
+                              <Badge bg={getBadgeColor(order.status)}>
+                                {getStatusText(order.status)}
+                              </Badge>
+                            </td>
+                            <td>{formatPrice(order.price || order.total_price)}</td>
+                            <td>{order.region || order.delivery_region || '—'}</td>
+                            <td>{order.delivery_type || order.delivery_service_name || '—'}</td>
+                            <td>{order.delivery_address || '—'}</td>
+
+
                             <td>
                               {order.sticker_pdf ? (
                                 <Button 
