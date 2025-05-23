@@ -294,4 +294,46 @@ export const confirmShipment = async (supplyId: number, yandexMarketTokenId: num
     console.error('Ошибка при подтверждении поставки:', error);
     throw new Error('Ошибка при подтверждении поставки Яндекс Маркет. Подробности в консоли.');
   }
+};
+
+/**
+ * Отправка заказов в поставку
+ * @param orders Массив ID заказов
+ * @param yandexMarketTokenId ID токена Яндекс Маркет
+ * @returns Ответ от API
+ */
+export const sendOrdersToShipment = async (orders: (number | string)[], yandexMarketTokenId: number): Promise<any> => {
+  const apiUrl = `${API_BASE_URL}/yandex-market-orders/ready-to-ship/?yandex_market_token_id=${encodeURIComponent(yandexMarketTokenId)}`;
+  
+  console.log('Запрос на отправку заказов в поставку:', { orders, yandexMarketTokenId });
+  
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': API_TOKEN,
+        'Accept': 'application/json',
+        'X-CSRFTOKEN': CSRF_TOKEN,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        orders: orders
+      })
+    });
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(`Ошибка HTTP: ${response.status} ${response.statusText}. ${text}`);
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      console.log('Ответ от сервера (ТЕКСТ):', text);
+      return { response: text };
+    }
+  } catch (error) {
+    console.error('Ошибка при отправке заказов в поставку:', error);
+    throw new Error('Ошибка при отправке заказов в поставку. Подробности в консоли.');
+  }
 }; 

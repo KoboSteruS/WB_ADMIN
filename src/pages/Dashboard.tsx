@@ -28,7 +28,8 @@ import {
   fetchYandexMarketOrders, 
   changeOrderStatus as changeYandexOrderStatus, 
   addYandexMarketToken,
-  confirmShipment as confirmYandexMarketShipment
+  confirmShipment as confirmYandexMarketShipment,
+  sendOrdersToShipment as sendYandexOrdersToShipment
 } from '../services/yandexMarketApi';
 import { formatDate, formatPrice } from '../utils/orderUtils';
 import { getBadgeColor, getStatusText, getSubstatusText } from '../utils/statusHelpers';
@@ -149,6 +150,8 @@ const Dashboard: React.FC = () => {
   const [ymStatusFilters, setYmStatusFilters] = useState<string[]>([]);
   const [ymSupplyStatusFilters, setYmSupplyStatusFilters] = useState<string[]>([]);
   const [ymSubstatusFilters, setYmSubstatusFilters] = useState<string[]>([]);
+  const [ymDeliveryDateStart, setYmDeliveryDateStart] = useState<string>('');
+  const [ymDeliveryDateEnd, setYmDeliveryDateEnd] = useState<string>('');
   const [substatusOptions, setSubstatusOptions] = useState<{value: string; label: string}[]>([]);
   
   // Загружаем сохраненные опции подстатусов при инициализации
@@ -216,7 +219,7 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     // Сброс текущей страницы Yandex Market при изменении фильтров Yandex Market
     setYmCurrentPage(1);
-  }, [ymStatusFilters, ymSupplyStatusFilters, ymSubstatusFilters]);
+  }, [ymStatusFilters, ymSupplyStatusFilters, ymSubstatusFilters, ymDeliveryDateStart, ymDeliveryDateEnd]);
 
   /**
    * Загрузка списка юридических лиц с сервера
@@ -370,16 +373,16 @@ const Dashboard: React.FC = () => {
     
     // Обычный выбор при отсутствии Shift
     if (!shiftKeyPressed || !lastSelectedWbOrder) {
-      setSelectedWbOrders(prevSelected => {
-        const newSelected = new Set(prevSelected);
-        if (newSelected.has(orderId)) {
-          newSelected.delete(orderId);
-        } else {
-          newSelected.add(orderId);
-        }
+    setSelectedWbOrders(prevSelected => {
+      const newSelected = new Set(prevSelected);
+      if (newSelected.has(orderId)) {
+        newSelected.delete(orderId);
+      } else {
+        newSelected.add(orderId);
+      }
         setLastSelectedWbOrder(orderId);
-        return newSelected;
-      });
+      return newSelected;
+    });
       return;
     }
     
@@ -441,16 +444,16 @@ const Dashboard: React.FC = () => {
     
     // Обычный выбор при отсутствии Shift
     if (!shiftKeyPressed || !lastSelectedOzonOrder) {
-      setSelectedOzonOrders(prevSelected => {
-        const newSelected = new Set(prevSelected);
-        if (newSelected.has(orderId)) {
-          newSelected.delete(orderId);
-        } else {
-          newSelected.add(orderId);
-        }
+    setSelectedOzonOrders(prevSelected => {
+      const newSelected = new Set(prevSelected);
+      if (newSelected.has(orderId)) {
+        newSelected.delete(orderId);
+      } else {
+        newSelected.add(orderId);
+      }
         setLastSelectedOzonOrder(orderId);
-        return newSelected;
-      });
+      return newSelected;
+    });
       return;
     }
     
@@ -512,16 +515,16 @@ const Dashboard: React.FC = () => {
     
     // Обычный выбор при отсутствии Shift
     if (!shiftKeyPressed || !lastSelectedYmOrder) {
-      setSelectedYmOrders(prevSelected => {
-        const newSelected = new Set(prevSelected);
-        if (newSelected.has(orderId)) {
-          newSelected.delete(orderId);
-        } else {
-          newSelected.add(orderId);
-        }
+    setSelectedYmOrders(prevSelected => {
+      const newSelected = new Set(prevSelected);
+      if (newSelected.has(orderId)) {
+        newSelected.delete(orderId);
+      } else {
+        newSelected.add(orderId);
+      }
         setLastSelectedYmOrder(orderId);
-        return newSelected;
-      });
+      return newSelected;
+    });
       return;
     }
     
@@ -2142,37 +2145,157 @@ const Dashboard: React.FC = () => {
   };
 
   /**
-   * Получение отфильтрованных заказов Яндекс Маркет
+   * Проверка валидности даты
    */
-    const getFilteredYmOrders = () => {
-    let filteredOrders = getSortedYmOrders();
+  const isValidDate = (date: string | number | Date | undefined): boolean => {
+    if (!date) return false;
+    const d = new Date(date);
+    return d instanceof Date && !isNaN(d.getTime());
+  };
+
+  /**
+   * Преобразование строки даты из русского формата в объект Date
+   */
+  const parseRussianDate = (dateStr: string | undefined): Date | null => {
+    if (!dateStr) return null;
     
-    // Применяем множественные фильтры по статусу Яндекс Маркет
-    if (ymStatusFilters.length > 0) {
-      filteredOrders = filteredOrders.filter(order => 
-        ymStatusFilters.some(filter => 
-          (order.status || '').toLowerCase() === filter.toLowerCase()
-        )
+    console.log('Парсинг даты:', dateStr);
+    
+    try {
+      // Если дата уже в формате ISO или другом стандартном формате
+      const standardDate = new Date(dateStr);
+      if (isValidDate(standardDate)) {
+        console.log('Дата распознана как стандартный формат:', standardDate);
+        return standardDate;
+      }
+
+      // Пробуем парсить как русский формат
+      // Формат даты: "DD.MM.YYYY" или "DD.MM.YYYY HH:mm"
+      const [datePart, timePart = '00:00'] = dateStr.split(' ');
+      const [day, month, year] = datePart.split('.');
+      const [hours, minutes] = timePart.split(':');
+      
+      console.log('Разбор компонентов даты:', {
+        day, month, year, hours, minutes,
+        parsed: {
+          year: parseInt(year),
+          month: parseInt(month) - 1,
+          day: parseInt(day),
+          hours: parseInt(hours),
+          minutes: parseInt(minutes)
+        }
+      });
+
+      const date = new Date(
+        parseInt(year),
+        parseInt(month) - 1,
+        parseInt(day),
+        parseInt(hours),
+        parseInt(minutes)
       );
+
+      console.log('Результат парсинга:', {
+        input: dateStr,
+        output: date,
+        isValid: isValidDate(date)
+      });
+
+      return isValidDate(date) ? date : null;
+    } catch (error) {
+      console.error('Ошибка парсинга даты:', dateStr, error);
+      return null;
     }
+  };
+
+  /**
+   * Фильтрация заказов Яндекс Маркета
+   */
+  const getFilteredYmOrders = (): YandexMarketOrder[] => {
+    console.log('=== Отладка фильтрации заказов ЯМ ===');
     
-    // Применяем множественные фильтры по статусу поставки
-    if (ymSupplyStatusFilters.length > 0) {
-      filteredOrders = filteredOrders.filter(order => {
-        // Проверяем точное соответствие одному из выбранных фильтров
-        return ymSupplyStatusFilters.includes(order.supply_status || '');
+    // Выводим структуру первого заказа для анализа
+    if (ymOrders.length > 0) {
+      const firstOrder = ymOrders[0];
+      console.log('Структура первого заказа:', {
+        orderId: firstOrder.order_id,
+        supplyDate: firstOrder.supply_date,
+        parsedSupplyDate: firstOrder.supply_date ? new Date(firstOrder.supply_date) : null
       });
     }
-    
-    // Применяем множественные фильтры по подстатусу
-    if (ymSubstatusFilters.length > 0) {
-      filteredOrders = filteredOrders.filter(order => {
-        // Проверяем точное соответствие одному из выбранных фильтров подстатусов
-        return ymSubstatusFilters.includes(order.substatus || '');
-      });
-    }
-    
-    return filteredOrders;
+
+    return ymOrders.filter(order => {
+      // Фильтр по статусу
+      if (ymStatusFilters.length > 0 && !ymStatusFilters.includes(order.status || '')) {
+        return false;
+      }
+
+      // Фильтр по подстатусу поставки
+      if (ymSupplyStatusFilters.length > 0 && !ymSupplyStatusFilters.includes(order.substatus || '')) {
+        return false;
+      }
+
+      // Фильтр по подстатусу
+      if (ymSubstatusFilters.length > 0 && !ymSubstatusFilters.includes(order.substatus || '')) {
+        return false;
+      }
+
+      // Фильтр по диапазону дат поставки
+      if (ymDeliveryDateStart || ymDeliveryDateEnd) {
+        try {
+          const supplyDate = order.supply_date;
+          
+          console.log('Проверка заказа:', {
+            orderId: order.order_id,
+            supplyDate,
+            filterStart: ymDeliveryDateStart,
+            filterEnd: ymDeliveryDateEnd
+          });
+
+          // Если нет даты поставки, пропускаем заказ
+          if (!supplyDate) {
+            console.log('Нет даты поставки для заказа:', order.order_id);
+            return false;
+          }
+
+          // Преобразуем дату поставки в объект Date
+          const supplyDateObj = new Date(supplyDate);
+          
+          // Преобразуем даты фильтра в начало и конец дня
+          const startDate = ymDeliveryDateStart ? new Date(ymDeliveryDateStart) : null;
+          const endDate = ymDeliveryDateEnd ? new Date(ymDeliveryDateEnd) : null;
+
+          if (startDate) {
+            startDate.setHours(0, 0, 0, 0);
+          }
+          
+          if (endDate) {
+            endDate.setHours(23, 59, 59, 999);
+          }
+
+          // Проверяем попадание в диапазон
+          const isInRange = (
+            (!startDate || supplyDateObj >= startDate) &&
+            (!endDate || supplyDateObj <= endDate)
+          );
+
+          console.log('Результат проверки:', {
+            orderId: order.order_id,
+            supplyDate,
+            parsedSupplyDate: supplyDateObj.toLocaleString('ru-RU'),
+            filterStart: startDate?.toLocaleString('ru-RU'),
+            filterEnd: endDate?.toLocaleString('ru-RU'),
+            isInRange
+          });
+
+          return isInRange;
+        } catch (error) {
+          console.error('Ошибка при обработке дат заказа:', order.order_id, error);
+          return false;
+        }
+      }
+
+      return true;
+    });
   };
 
   /**
@@ -2973,6 +3096,100 @@ const Dashboard: React.FC = () => {
     window.location.reload();
   };
 
+  // Добавляем обработчик для фильтра по дате поставки
+  const handleYmDeliveryDateFilterChange = (date: string) => {
+    setYmCurrentPage(1);
+  };
+
+  /**
+   * Получение уникальных дат поставки
+   */
+  const getUniqueDeliveryDates = (): string[] => {
+    const dates = new Set<string>();
+    
+    ymOrders.forEach(order => {
+      const deliveryDate = order.delivery?.dates?.fromDate || order.delivery?.dates?.toDate;
+      if (deliveryDate) {
+        dates.add(new Date(deliveryDate).toISOString().split('T')[0]);
+      }
+    });
+    
+    return Array.from(dates).sort();
+  };
+
+  /**
+   * Обработчик отправки заказов Яндекс Маркет в поставку
+   */
+  const handleSendYandexOrdersToShipment = async () => {
+    if (selectedYmOrders.size === 0) {
+      setStatusChangeError('Выберите хотя бы один заказ для отправки в поставку');
+      return;
+    }
+
+    setStatusChangeLoading(true);
+    setStatusChangeError(null);
+    setStatusChangeSuccess(false);
+
+    try {
+      // Получаем ID заказов
+      const orderIds = Array.from(selectedYmOrders).map(orderId => {
+        const order = ymOrders.find(o => 
+          (o.id || o.order_id) === orderId
+        );
+        return order?.order_id || orderId;
+      });
+
+      // Получаем ID токена из первого заказа
+      const firstOrder = ymOrders.find(o => selectedYmOrders.has(o.id || o.order_id || ''));
+      const yandexMarketTokenId = firstOrder?.yandex_market_token || 1;
+
+      // Отправляем запрос на отправку в поставку
+      const result = await sendYandexOrdersToShipment(orderIds, yandexMarketTokenId);
+      
+      console.log('Результат отправки в поставку:', result);
+      
+      if (result.response === 'ok' || result.status === 'success') {
+        setStatusChangeSuccess(true);
+        
+        // Обновляем данные заказов
+        setTimeout(() => {
+          if (selectedLegalEntity) {
+            loadYandexMarketOrders(selectedLegalEntity);
+          }
+        }, 1500);
+      } else {
+        throw new Error('Неожиданный ответ от сервера');
+      }
+    } catch (error) {
+      console.error('Ошибка при отправке заказов в поставку:', error);
+      setStatusChangeError(`Ошибка при отправке заказов в поставку: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setStatusChangeLoading(false);
+    }
+  };
+
+  /**
+   * Обработчик изменения начальной даты фильтра
+   */
+  const handleYmDeliveryDateStartChange = (date: string) => {
+    console.log('Установка начальной даты:', {
+      rawDate: date,
+      parsed: new Date(date)
+    });
+    setYmDeliveryDateStart(date);
+  };
+
+  /**
+   * Обработчик изменения конечной даты фильтра
+   */
+  const handleYmDeliveryDateEndChange = (date: string) => {
+    console.log('Установка конечной даты:', {
+      rawDate: date,
+      parsed: new Date(date)
+    });
+    setYmDeliveryDateEnd(date);
+  };
+
   return (
     <Container fluid className="dashboard-container">
       {/* Модальное окно с деталями заказа */}
@@ -3505,6 +3722,22 @@ const Dashboard: React.FC = () => {
                   </Alert>
                 ) : (
                   <div className="table-responsive ozon-orders-table">
+                    <style>
+                      {`
+                        .ozon-orders-table tr[data-has-multiple-products="true"] {
+                          background-color: rgba(0, 0, 0, 0.02);
+                        }
+                        .ozon-orders-table tr[data-is-additional-product="true"] td {
+                          background-color: rgba(0, 0, 0, 0.01);
+                        }
+                        .ozon-orders-table tr[data-is-total-row="true"] {
+                          background-color: rgba(0, 0, 0, 0.03);
+                        }
+                        .ozon-orders-table td {
+                          vertical-align: middle;
+                        }
+                      `}
+                    </style>
                     <Table hover bordered striped>
                       <thead>
                         <tr>
@@ -3621,14 +3854,11 @@ const Dashboard: React.FC = () => {
                                 <td>{order.products?.[0]?.name || order.product_name || order.name || '—'}</td>
                                 <td>{order.products?.[0]?.sku || order.sku || order.offer_id || '—'}</td>
                                 <td>{order.products?.[0]?.quantity || '—'}</td>
-                                                                                            <td>
+                                <td>
                                 <Badge bg={getBadgeColor(order.status)}>
                                   {getStatusText(order.status)}
                                 </Badge>
-                              </td>
-                              <td>
-                                {order.substatus || '-'}
-                              </td>
+                                </td>
                                 <td className="text-end">{formatPrice(order.products?.[0]?.price || order.price || order.sale_price || 0)}</td>
                                 <td>{order.delivery_method?.warehouse || '—'}</td>
                                 <td>{order.delivery_method?.name || '—'}</td>
@@ -3680,7 +3910,7 @@ const Dashboard: React.FC = () => {
                           // Если несколько товаров, то отображаем первый товар в основной строке
                           return (
                             <React.Fragment key={getRowKey(order, 'ozon', index)}>
-                              <tr>
+                              <tr data-has-multiple-products="true">
                                 <td>
                                   <Form.Check
                                     type="checkbox"
@@ -3689,25 +3919,35 @@ const Dashboard: React.FC = () => {
                                     aria-label={`Выбрать заказ ${order.id || order.order_id || ''}`}
                                   />
                                 </td>
-                                <td rowSpan={order.products?.length || 1}>{order.posting_number || '—'}</td>
-                                <td rowSpan={order.products?.length || 1}>{order.order_id || '—'}</td>
-                                <td rowSpan={order.products?.length || 1}>{formatDate(order.in_process_at || order.created_at || order.created_date)}</td>
+                                <td rowSpan={order.products?.length + 1 || 2}>{order.posting_number || '—'}</td>
+                                <td rowSpan={order.products?.length + 1 || 2}>{order.order_id || '—'}</td>
+                                <td rowSpan={order.products?.length + 1 || 2}>{formatDate(order.in_process_at || order.created_at || order.created_date)}</td>
                                 <td>
                                   <div className="d-flex align-items-center">
                                     <span>{order.products?.[0]?.name || '—'}</span>
+                                    {order.products && order.products.length > 1 && (
+                                      <Badge bg="info" className="ms-2">
+                                        {order.products.length} товара
+                                      </Badge>
+                                    )}
                                   </div>
                                 </td>
                                 <td>{order.products?.[0]?.sku || '—'}</td>
                                 <td className="text-center">{order.products?.[0]?.quantity || 1} шт.</td>
-                                <td rowSpan={order.products?.length || 1}>
+                                <td rowSpan={order.products?.length + 1 || 2}>
                                   <Badge bg={getBadgeColor(order.status)}>
                                     {getStatusText(order.status)}
                                   </Badge>
+                                  {order.substatus && (
+                                    <div className="small text-muted mt-1">
+                                      {order.substatus}
+                                    </div>
+                                  )}
                                 </td>
                                 <td className="text-end">{formatPrice(order.products?.[0]?.price || 0)}</td>
-                                <td rowSpan={order.products?.length || 1}>{order.delivery_method?.warehouse || '—'}</td>
-                                <td rowSpan={order.products?.length || 1}>{order.delivery_method?.name || '—'}</td>
-                                <td rowSpan={order.products?.length || 1}>
+                                <td rowSpan={order.products?.length + 1 || 2}>{order.delivery_method?.warehouse || '—'}</td>
+                                <td rowSpan={order.products?.length + 1 || 2}>{order.delivery_method?.name || '—'}</td>
+                                <td rowSpan={order.products?.length + 1 || 2}>
                                   {order.supply_barcode_text ? (
                                     <div>
                                       <span className="d-block mb-1" style={{ fontSize: '0.85em' }}>
@@ -3726,7 +3966,7 @@ const Dashboard: React.FC = () => {
                                     </div>
                                   ) : '—'}
                                 </td>
-                                <td rowSpan={order.products?.length || 1}>
+                                <td rowSpan={order.products?.length + 1 || 2}>
                                   {order.sticker_pdf ? (
                                     <Button 
                                       variant="outline-primary" 
@@ -3738,7 +3978,7 @@ const Dashboard: React.FC = () => {
                                     </Button>
                                   ) : '—'}
                                 </td>
-                                <td rowSpan={order.products?.length || 1}>
+                                <td rowSpan={order.products?.length + 1 || 2}>
                                   <Button
                                     variant="outline-info"
                                     size="sm"
@@ -3752,19 +3992,34 @@ const Dashboard: React.FC = () => {
                               
                               {/* Остальные товары отображаем в отдельных строках */}
                               {order.products?.slice(1).map((product: OzonOrderProduct, idx: number) => (
-                                <tr key={`${orderId}-product-${idx + 1}`}>
+                                <tr data-has-multiple-products="true" key={`${orderId}-product-${idx + 1}`}>
                                   <td></td> {/* Чекбокс */}
-                                                                     {/* Пропускаем ячейки с rowSpan */}
-                                              <td>{product.name || '—'}</td>
+                                  <td colSpan={3}></td> {/* Пропускаем ячейки с rowSpan */}
+                                  <td>
+                                    <div className="d-flex align-items-center">
+                                      <span>{product.name || '—'}</span>
+                                    </div>
+                                  </td>
                                               <td>{product.sku || '—'}</td>
                                   <td className="text-center">{product.quantity || 1} шт.</td>
-                                   {/* Пропускаем ячейку статуса с rowSpan */}
+                                  <td></td> {/* Статус */}
                                   <td className="text-end">{formatPrice(product.price || 0)}</td>
-                                   {/* Пропускаем оставшиеся ячейки с rowSpan */}
+                                  <td colSpan={4}></td> {/* Пропускаем оставшиеся ячейки с rowSpan */}
                                             </tr>
                                           ))}
                               
-
+                              {/* Добавляем итоговую строку для заказа с несколькими товарами */}
+                              <tr data-is-total-row="true" className="table-light">
+                                <td colSpan={6} className="text-end fw-bold">Итого:</td>
+                                <td className="text-center fw-bold">
+                                  {order.products?.reduce((sum: number, p: OzonOrderProduct) => sum + (p.quantity || 1), 0)} шт.
+                                </td>
+                                            <td></td>
+                                <td className="text-end fw-bold">
+                                  {formatPrice(order.products?.reduce((sum: number, p: OzonOrderProduct) => sum + ((p.price || 0) * (p.quantity || 1)), 0))}
+                                  </td>
+                                <td colSpan={4}></td>
+                                </tr>
                             </React.Fragment>
                           );
                         })}
@@ -3839,6 +4094,25 @@ const Dashboard: React.FC = () => {
                     )}
                   </Button>
                   
+                  <Button
+                    variant="success"
+                    size="sm"
+                    onClick={handleSendYandexOrdersToShipment}
+                    disabled={selectedYmOrders.size === 0 || statusChangeLoading}
+                    className="me-2"
+                  >
+                    {statusChangeLoading ? (
+                      <>
+                        <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
+                        Отправка в поставку...
+                      </>
+                    ) : (
+                      <>
+                        <i className="bi bi-box-seam me-2"></i>
+                        Отправить в поставку ({selectedYmOrders.size})
+                      </>
+                    )}
+                  </Button>
 
                   <Button 
                     variant="outline-success" 
@@ -3901,6 +4175,70 @@ const Dashboard: React.FC = () => {
                     selectedValues={ymSubstatusFilters}
                     onChange={handleYmSubstatusFilterChange}
                   />
+
+                  {/* Фильтры для Яндекс Маркет */}
+                  <MultiSelectDropdown
+                    title="Статус заказа"
+                    options={[
+                      { value: "NEW", label: "Новый" },
+                      { value: "PROCESSING", label: "В обработке" },
+                      { value: "READY_TO_SHIP", label: "Готов к отправке" },
+                      { value: "SHIPPED", label: "Отправлен" }
+                    ]}
+                    selectedValues={ymStatusFilters}
+                    onChange={handleYmStatusFilterChange}
+                  />
+
+                  <div className="d-flex gap-2 align-items-center mb-3">
+                  <div>
+                      <label className="form-label">Дата поставки:</label>
+                      <div className="d-flex gap-2">
+                        <div>
+                          <input
+                            type="date"
+                            className="form-control form-control-sm"
+                            value={ymDeliveryDateStart}
+                            onChange={(e) => setYmDeliveryDateStart(e.target.value)}
+                            placeholder="От"
+                          />
+                          {ymDeliveryDateStart && (
+                            <small className="text-muted">
+                              {new Date(ymDeliveryDateStart).toLocaleDateString('ru-RU')}
+                            </small>
+                          )}
+                        </div>
+                        <span className="align-self-center">—</span>
+                        <div>
+                          <input
+                            type="date"
+                            className="form-control form-control-sm"
+                            value={ymDeliveryDateEnd}
+                            onChange={(e) => setYmDeliveryDateEnd(e.target.value)}
+                            placeholder="До"
+                          />
+                          {ymDeliveryDateEnd && (
+                            <small className="text-muted">
+                              {new Date(ymDeliveryDateEnd).toLocaleDateString('ru-RU')}
+                            </small>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {(ymDeliveryDateStart || ymDeliveryDateEnd) && (
+                      <Button
+                        variant="outline-secondary"
+                        size="sm"
+                        className="align-self-end mb-1"
+                        onClick={() => {
+                          setYmDeliveryDateStart('');
+                          setYmDeliveryDateEnd('');
+                          setYmCurrentPage(1);
+                        }}
+                      >
+                        <i className="bi bi-x-lg"></i>
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 
                 {ymOrdersLoading ? (
