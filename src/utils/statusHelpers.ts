@@ -3,13 +3,77 @@
  */
 
 /**
- * Определяет цвет бейджа в зависимости от статуса заказа
+ * Определяет цвет бейджа в зависимости от статуса или подстатуса заказа
  */
 export const getBadgeColor = (status?: string): string => {
   if (!status) return 'secondary';
   
   const statusUpper = status.toUpperCase();
   const statusLower = status.toLowerCase();
+  
+  // Подстатусы Яндекс Маркет
+  switch (statusUpper) {
+    case 'READY_TO_SHIP':
+      return 'warning';
+    case 'PROCESSING_STARTED':
+      return 'primary';
+    case 'STARTED':
+      return 'primary';
+    case 'READY_TO_PICKUP':
+      return 'info';
+    case 'ON_DELIVERY':
+      return 'info';
+    case 'DELIVERY_SERVICE_RECEIVED':
+      return 'info';
+    case 'SHIPPED':
+      return 'success';
+    case 'DELIVERED':
+      return 'success';
+    case 'DELIVERED_TO_PICKUP_POINT':
+      return 'success';
+    case 'DELIVERED_TO_BUYER':
+      return 'success';
+    case 'CANCELLED':
+      return 'danger';
+    case 'REJECTED':
+      return 'danger';
+    case 'NOT_APPROVED':
+      return 'danger';
+    case 'CREATED':
+      return 'secondary';
+    case 'AWAITING_CONFIRMATION':
+      return 'secondary';
+    case 'AWAITING_PACKAGING':
+      return 'warning';
+    case 'PACKAGE_PREPARED':
+      return 'warning';
+    case 'ALREADY_SHIPPED':
+      return 'success';
+    case 'UNDELIVERED':
+      return 'danger';
+    case 'SORTING_CENTER_RECEIVED':
+      return 'info';
+    case 'SORTING_CENTER_PREPARED':
+      return 'warning';
+    case 'TRANSMISSION_CREATED':
+      return 'secondary';
+    case 'COURIER_RECEIVED':
+      return 'info';
+    case 'RETURN_PREPARING':
+      return 'danger';
+    case 'RETURN_PREPARING_TRANSMITTED':
+      return 'danger';
+    case 'CANCELLED_WITH_COMPENSATION':
+      return 'danger';
+    case 'LOST':
+      return 'dark';
+    case 'DAMAGED':
+      return 'danger';
+    case 'PARTIALLY_DELIVERED':
+      return 'warning';
+    case 'FULFILMENT_SHIPPED':
+      return 'success';
+  }
   
   // Статусы Яндекс Маркет в верхнем регистре
   if (statusUpper === 'PROCESSING') {

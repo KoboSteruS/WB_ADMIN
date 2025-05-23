@@ -3983,13 +3983,12 @@ const Dashboard: React.FC = () => {
                             onSort={handleYmSort}
                           />
                           <SortableColumnHeader
-                            column="status"
-                            title="Статус"
+                            column="substatus"
+                            title="Подстатус"
                             currentSortColumn={ymSortColumn}
                             currentSortDirection={ymSortDirection}
                             onSort={handleYmSort}
                           />
-                          <th>Подстатус</th>
                           <SortableColumnHeader
                             column="price"
                             title="Стоимость"
@@ -4073,11 +4072,17 @@ const Dashboard: React.FC = () => {
                             <td>{order.name || order.product_name || '—'}</td>
                             <td>{order.shop_sku || order.offer_id || '—'}</td>
                             <td>
-                              <Badge bg={getBadgeColor(order.status)}>
-                                {getStatusText(order.status)}
+                              <Badge 
+                                bg={getBadgeColor(order.substatus)} 
+                                style={{ 
+                                  fontSize: '0.95em', 
+                                  padding: '0.5em 0.7em',
+                                  fontWeight: 'normal'
+                                }}
+                              >
+                                {getSubstatusText(order.substatus)}
                               </Badge>
                             </td>
-                            <td>{getSubstatusText(order.substatus)}</td>
                             <td>{formatPrice(order.price || order.total_price)}</td>
                             <td>{order.region || order.delivery_region || '—'}</td>
                             <td>{order.delivery_type || order.delivery_service_name || '—'}</td>
